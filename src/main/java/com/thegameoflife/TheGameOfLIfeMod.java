@@ -31,6 +31,7 @@ public class TheGameOfLIfeMod implements ModInitializer {
 				// Выполняем команду /say Hello через Brigadier
 				dispatcher.execute("tick freeze", context.getSource());
 
+
 				return 1;
 			}));
 		});
