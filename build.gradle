@@ -22,7 +22,7 @@ loom {
 	splitEnvironmentSourceSets()
 
 	mods {
-		"modid" {
+		"thegameoflife" {
 			sourceSet sourceSets.main
 			sourceSet sourceSets.client
 		}
