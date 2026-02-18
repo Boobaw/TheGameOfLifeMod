@@ -20,7 +20,7 @@
 			"com.thegameoflife.TheGameOfLIfeMod"
 		],
 		"client": [
-			"com.example.ExampleModClient"
+			"com.thegameoflife.TheGameOfLIfeClient"
 		]
 	},
 	"mixins": [
