@@ -33,10 +33,12 @@ public class TheGameOfLIfeClient implements ClientModInitializer {
 	private static String lastEnKeys = "";
 	private static String lastRuKeys = "";
 
+	private static long nextHud = 0;
+
 	private static final String MODEL_EN =
-			"thegameoflife/vosk-model/vosk-model-small-en-us-0.15";
+			"thegameoflife/vosk-model/vosk-model-en-us-0.42-gigaspeech";
 	private static final String MODEL_RU =
-			"thegameoflife/vosk-model/vosk-model-small-ru-0.22";
+			"thegameoflife/vosk-model/vosk-model-ru-0.10";
 
 	private static final Path KEYWORDS_FILE = Path.of("thegameoflife/keywords.txt");
 	private static List<String> keywords = new ArrayList<>();
@@ -73,13 +75,35 @@ public class TheGameOfLIfeClient implements ClientModInitializer {
 				if (client.player != null) {
 					client.player.displayClientMessage(
 							Component.literal("Voice: " + (running ? "ON" : "OFF")), false);
+
+					if (running) {
+						client.player.displayClientMessage(
+								Component.literal("Mic: " + recorder.getSelectedMixerName()), false);
+					}
 				}
 
 				if (running) startVoiceLoop();
 			}
+
+			showMicHud();
 		});
 
 		logger.log("[Client] init done");
+	}
+
+	private static void showMicHud() {
+		Minecraft mc = Minecraft.getInstance();
+		long now = System.currentTimeMillis();
+		if (now < nextHud) return;
+		nextHud = now + 1000;
+
+		if (mc.player != null) {
+			mc.player.displayClientMessage(
+					Component.literal("Mic: " + recorder.getSelectedMixerName()
+							+ " | Voice: " + (running ? "ON" : "OFF")),
+					true
+			);
+		}
 	}
 
 	private static void startVoiceLoop() {
@@ -106,11 +130,8 @@ public class TheGameOfLIfeClient implements ClientModInitializer {
 						float sr = ais.getFormat().getSampleRate();
 						byte[] data = ais.readAllBytes();
 
-						String en = recognize(modelEn, sr, data);
-						String ru = recognize(modelRu, sr, data);
-
-						en = sanitizeForChat(fixMojibake(en));
-						ru = sanitizeForChat(fixMojibake(ru));
+						String en = sanitizeForChat(fixMojibake(recognize(modelEn, sr, data)));
+						String ru = sanitizeForChat(fixMojibake(recognize(modelRu, sr, data)));
 
 						String enKeys = extractKeywords(en);
 						String ruKeys = extractKeywords(ru);
