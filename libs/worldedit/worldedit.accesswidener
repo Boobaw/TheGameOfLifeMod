@@ -1,0 +1,9 @@
+accessWidener	v2	intermediary
+accessible	class	net/minecraft/class_3215$class_4212
+accessible	field	net/minecraft/class_3215	field_18809	Lnet/minecraft/class_3215$class_4212;
+accessible	field	net/minecraft/class_2168	field_9819	Lnet/minecraft/class_2165;
+accessible	field	net/minecraft/class_3225	field_14003	Z
+accessible	field	net/minecraft/class_27	field_139	Lnet/minecraft/class_5268;
+accessible	field	net/minecraft/class_31	field_25425	Lnet/minecraft/class_5285;
+mutable	field	net/minecraft/class_31	field_25425	Lnet/minecraft/class_5285;
+accessible	method	net/minecraft/class_2622	<init>	(Lnet/minecraft/class_2338;Lnet/minecraft/class_2591;Lnet/minecraft/class_2487;)V

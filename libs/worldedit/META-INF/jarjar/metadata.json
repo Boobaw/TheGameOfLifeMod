@@ -1,0 +1,16 @@
+{
+  "jars": [
+    {
+      "identifier": {
+        "group": "org.enginehub.worldeditcui-protocol",
+        "artifact": "worldeditcui-protocol-neoforge-mc1.21.11"
+      },
+      "version": {
+        "range": "[4.0.2,)",
+        "artifactVersion": "4.0.2"
+      },
+      "path": "META-INF/jarjar/worldeditcui-protocol-neoforge-mc1.21.11-4.0.2.jar",
+      "isObfuscated": false
+    }
+  ]
+}
