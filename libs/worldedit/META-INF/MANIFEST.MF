@@ -1,0 +1,20 @@
+Manifest-Version: 1.0
+Implementation-Version: 7.4.0
+WorldEdit-Version: 7.4.0
+WorldEdit-Kind: MOD
+Main-Class: com.sk89q.worldedit.internal.util.InfoEntryPoint
+Class-Path: truezip.jar WorldEdit/truezip.jar ../truezip.jar ../WorldEdi
+ t/truezip.jar truevfs.jar WorldEdit/truevfs.jar ../truevfs.jar ../World
+ Edit/truevfs.jar js.jar WorldEdit/js.jar ../js.jar ../WorldEdit/js.jar
+Fabric-Jar-Type: classes
+Fabric-Loom-Mixin-Remap-Type: static
+Fabric-Gradle-Version: 9.2.1
+Fabric-Loom-Version: 1.14.7
+Fabric-Mixin-Compile-Extensions-Version: 0.6.0
+Fabric-Minecraft-Version: 1.21.11
+Fabric-Tiny-Remapper-Version: 0.12.1
+Fabric-Loader-Version: 0.18.4
+Fabric-Mixin-Version: 0.17.0+mixin.0.8.7
+Fabric-Mixin-Group: net.fabricmc
+Fabric-Mapping-Namespace: intermediary
+
