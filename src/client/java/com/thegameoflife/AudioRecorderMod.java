@@ -1,7 +1,8 @@
 package com.thegameoflife;
 
 import javax.sound.sampled.*;
-import java.io.File;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 
 public class AudioRecorderMod {
 
@@ -30,11 +31,8 @@ public class AudioRecorderMod {
         return AudioSystem.getMixerInfo();
     }
 
-    public File record5s(File dir, String name) {
+    public byte[] record5sBytes() {
         try {
-            dir.mkdirs();
-            File out = new File(dir, name + ".wav");
-
             AudioFormat[] formats = new AudioFormat[] {
                     new AudioFormat(16000f, 16, 1, true, false),
                     new AudioFormat(44100f, 16, 1, true, false),
@@ -54,7 +52,7 @@ public class AudioRecorderMod {
                         Mixer m = AudioSystem.getMixer(selectedMixer);
                         if (m.isLineSupported(info)) {
                             TargetDataLine line = (TargetDataLine) m.getLine(info);
-                            return recordFixed5s(out, line, format);
+                            return recordFixed5sBytes(line, format);
                         }
                     } catch (Exception e) {
                         last = e;
@@ -65,7 +63,7 @@ public class AudioRecorderMod {
                 try {
                     if (AudioSystem.isLineSupported(info)) {
                         TargetDataLine line = (TargetDataLine) AudioSystem.getLine(info);
-                        return recordFixed5s(out, line, format);
+                        return recordFixed5sBytes(line, format);
                     }
                 } catch (Exception e) {
                     last = e;
@@ -81,25 +79,37 @@ public class AudioRecorderMod {
         }
     }
 
-    private File recordFixed5s(File out, TargetDataLine line, AudioFormat format) throws Exception {
+    private byte[] recordFixed5sBytes(TargetDataLine line, AudioFormat format) throws Exception {
         line.open(format);
         line.start();
 
-        AudioInputStream stream = new AudioInputStream(line);
+        ByteArrayOutputStream pcmOut = new ByteArrayOutputStream();
+        byte[] buffer = new byte[4096];
 
-        Thread writer = new Thread(() -> {
-            try { AudioSystem.write(stream, AudioFileFormat.Type.WAVE, out); }
-            catch (Exception ignored) {}
-        });
-        writer.start();
-
-        Thread.sleep(5000);
+        long endAt = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < endAt) {
+            int read = line.read(buffer, 0, buffer.length);
+            if (read > 0) {
+                pcmOut.write(buffer, 0, read);
+            }
+        }
 
         line.stop();
         line.close();
 
-        log("Chunk recorded: " + out.getAbsolutePath() + " format=" + format);
-        return out;
+        byte[] pcm = pcmOut.toByteArray();
+        ByteArrayOutputStream wavOut = new ByteArrayOutputStream();
+        try (AudioInputStream ais = new AudioInputStream(
+                new ByteArrayInputStream(pcm),
+                format,
+                pcm.length / format.getFrameSize()
+        )) {
+            AudioSystem.write(ais, AudioFileFormat.Type.WAVE, wavOut);
+        }
+
+        byte[] data = wavOut.toByteArray();
+        log("Chunk recorded: " + data.length + " bytes format=" + format);
+        return data;
     }
 
 

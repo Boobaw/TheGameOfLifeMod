@@ -4,20 +4,13 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
-import org.vosk.Model;
-import org.vosk.Recognizer;
 
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.*;
 
 public class TheGameOfLIfeClient implements ClientModInitializer {
 
@@ -30,25 +23,22 @@ public class TheGameOfLIfeClient implements ClientModInitializer {
 	private static volatile boolean running = false;
 	private static Thread sttThread;
 
-	private static String lastEnKeys = "";
-	private static String lastRuKeys = "";
-
 	private static long nextHud = 0;
-
-	private static final String MODEL_EN =
-			"thegameoflife/vosk-model/vosk-model-en-us-0.42-gigaspeech";
-	private static final String MODEL_RU =
-			"thegameoflife/vosk-model/vosk-model-ru-0.10";
-
-	private static final Path KEYWORDS_FILE = Path.of("thegameoflife/keywords.txt");
-	private static List<String> keywords = new ArrayList<>();
 
 	@Override
 	public void onInitializeClient() {
 		logger = new ChatLogger(new File("thegameoflife/chat.log"));
 		recorder.setLogger(logger);
+		VoiceNetworking.registerPayloads();
 
-		loadKeywords();
+		ClientPlayNetworking.registerGlobalReceiver(VoiceResultPayload.TYPE, (payload, context) -> {
+			context.client().execute(() -> {
+				if (context.client().player != null) {
+					context.client().player.displayClientMessage(
+							Component.literal(payload.message()), false);
+				}
+			});
+		});
 
 		keyMic = KeyBindingHelper.registerKeyBinding(new KeyMapping(
 				"key.thegameoflife.mic_menu",
@@ -109,138 +99,42 @@ public class TheGameOfLIfeClient implements ClientModInitializer {
 	private static void startVoiceLoop() {
 		if (sttThread != null && sttThread.isAlive()) return;
 
+		if (!ClientPlayNetworking.canSend(VoiceChunkPayload.TYPE)) {
+			running = false;
+			postChat("[VOICE][ERROR] server has no voice support");
+			return;
+		}
+
 		sttThread = new Thread(() -> {
-			try (Model modelEn = new Model(MODEL_EN);
-				 Model modelRu = new Model(MODEL_RU)) {
+			logger.log("[Client] voice loop started (send to server)");
 
-				logger.log("[Client] STT started (EN+RU) keywords-only");
+			while (running) {
+				byte[] data = recorder.record5sBytes();
 
-				while (running) {
-					File wav = recorder.record5s(
-							new File("thegameoflife/chunks"),
-							"chunk_" + System.currentTimeMillis());
-
-					if (wav == null) {
-						postChat("[KEY][ERROR] record failed");
-						try { Thread.sleep(1000); } catch (Exception ignored) {}
-						continue;
-					}
-
-					try (AudioInputStream ais = AudioSystem.getAudioInputStream(wav)) {
-						float sr = ais.getFormat().getSampleRate();
-						byte[] data = ais.readAllBytes();
-
-						String en = sanitizeForChat(fixMojibake(recognize(modelEn, sr, data)));
-						String ru = sanitizeForChat(fixMojibake(recognize(modelRu, sr, data)));
-
-						String enKeys = extractKeywords(en);
-						String ruKeys = extractKeywords(ru);
-
-						boolean posted = false;
-
-						if (!enKeys.isBlank() && !enKeys.equalsIgnoreCase(lastEnKeys)) {
-							postChat("[KEY][EN] " + enKeys);
-							lastEnKeys = enKeys;
-							logger.log("[Client] EN keys: " + enKeys);
-							posted = true;
-						}
-
-						if (!ruKeys.isBlank() && !ruKeys.equalsIgnoreCase(lastRuKeys)) {
-							postChat("[KEY][RU] " + ruKeys);
-							lastRuKeys = ruKeys;
-							logger.log("[Client] RU keys: " + ruKeys);
-							posted = true;
-						}
-
-						if (!posted) {
-							postChat("[KEY][EMPTY]");
-							logger.log("[Client] keys empty");
-						}
-
-					} catch (Exception e) {
-						postChat("[KEY][ERROR] " + e.getClass().getSimpleName());
-						logger.log("[Client] STT error: " + e);
-					}
+				if (data == null) {
+					postChat("[VOICE][ERROR] record failed");
+					try { Thread.sleep(1000); } catch (Exception ignored) {}
+					continue;
 				}
 
-				logger.log("[Client] STT stopped");
+				if (data.length > VoiceChunkPayload.MAX_BYTES) {
+					postChat("[VOICE][ERROR] chunk too large");
+					logger.log("[Client] chunk too large: " + data.length);
+					continue;
+				}
 
-			} catch (Exception e) {
-				logger.log("[Client] STT fatal: " + e);
-				postChat("[KEY][ERROR] STT fatal");
+				try {
+					ClientPlayNetworking.send(new VoiceChunkPayload(data));
+				} catch (Exception e) {
+					postChat("[VOICE][ERROR] " + e.getClass().getSimpleName());
+					logger.log("[Client] voice loop error: " + e);
+				}
 			}
-		}, "STT-Loop");
+
+			logger.log("[Client] voice loop stopped");
+		}, "Voice-Loop");
 
 		sttThread.start();
-	}
-
-	private static String recognize(Model model, float sampleRate, byte[] data) throws Exception {
-		try (Recognizer rec = new Recognizer(model, sampleRate)) {
-			rec.acceptWaveForm(data, data.length);
-			String result = rec.getFinalResult();
-			return result.replaceAll("(?s).*\"text\"\\s*:\\s*\"(.*?)\".*", "$1").trim();
-		}
-	}
-
-	private static void loadKeywords() {
-		try {
-			if (!Files.exists(KEYWORDS_FILE)) {
-				Files.createDirectories(KEYWORDS_FILE.getParent());
-				Files.writeString(KEYWORDS_FILE, "# one keyword per line\n", StandardCharsets.UTF_8);
-			}
-
-			List<String> lines = Files.readAllLines(KEYWORDS_FILE, StandardCharsets.UTF_8);
-			List<String> list = new ArrayList<>();
-
-			for (String line : lines) {
-				String s = line.trim();
-				if (s.isEmpty() || s.startsWith("#")) continue;
-				list.add(s.toLowerCase(Locale.ROOT));
-			}
-
-			keywords = list;
-			logger.log("[Client] keywords loaded: " + keywords.size());
-		} catch (Exception e) {
-			logger.log("[Client] keywords load error: " + e);
-			keywords = new ArrayList<>();
-		}
-	}
-
-	private static String extractKeywords(String text) {
-		if (text == null) return "";
-		String t = text.toLowerCase(Locale.ROOT);
-
-		LinkedHashSet<String> found = new LinkedHashSet<>();
-		for (String k : keywords) {
-			if (!k.isEmpty() && t.contains(k)) found.add(k);
-		}
-
-		if (found.isEmpty()) return "";
-		return String.join(", ", found);
-	}
-
-	private static String fixMojibake(String s) {
-		if (s == null) return "";
-		if (s.contains("Ð") || s.contains("Ñ")) {
-			return new String(s.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
-		}
-		return s;
-	}
-
-	private static String sanitizeForChat(String s) {
-		if (s == null) return "";
-		StringBuilder b = new StringBuilder();
-		for (int i = 0; i < s.length(); i++) {
-			char c = s.charAt(i);
-			if (Character.isSurrogate(c) || Character.isISOControl(c)) continue;
-
-			if (Character.isLetterOrDigit(c) ||
-					c == ' ' || c == '\'' || c == '-' ||
-					c == '.' || c == ',' || c == '!' || c == '?' || c == ':') {
-				b.append(c);
-			}
-		}
-		return b.toString().replaceAll("\\s+", " ").trim();
 	}
 
 	private static void postChat(String msg) {

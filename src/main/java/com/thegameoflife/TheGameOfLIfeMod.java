@@ -54,7 +54,7 @@ public class TheGameOfLIfeMod implements ModInitializer {
 	static {
 		COMMAND_MAP.put("stop", () -> runCommand("tick freeze"));
 		COMMAND_MAP.put("start", () -> runCommand("tick unfreeze"));
-		COMMAND_MAP.put("dirt", () -> printLoadedChunks(SERVER.overworld()));
+		//COMMAND_MAP.put("dirt", () -> printLoadedChunks(SERVER.overworld()));
 	}
 
 
@@ -62,9 +62,14 @@ public class TheGameOfLIfeMod implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
+		VoiceNetworking.registerPayloads();
 
 		// Получаем сервер (официальный lifecycle event)
-		ServerLifecycleEvents.SERVER_STARTED.register(s -> SERVER = s);
+		ServerLifecycleEvents.SERVER_STARTED.register(s -> {
+			SERVER = s;
+			VoiceServer.init();
+		});
+		ServerLifecycleEvents.SERVER_STOPPING.register(s -> VoiceServer.shutdown());
 
 		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
 
