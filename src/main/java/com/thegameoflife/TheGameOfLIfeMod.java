@@ -1,41 +1,38 @@
 package com.thegameoflife;
+
+
+import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
-import net.minecraft.core.BlockPos;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
-import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.lighting.LevelLightEngine;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
+
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+import net.minecraft.core.BlockPos;
 import net.minecraft.util.Util;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 
-import it.unimi.dsi.fastutil.longs.LongArrayList;
-import it.unimi.dsi.fastutil.longs.LongList;
-
-import net.fabricmc.api.ModInitializer;
 import net.minecraft.server.level.ServerLevel;
 
-import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
-import net.minecraft.world.level.lighting.LevelLightEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.w3c.dom.Text;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-
 
 
 public class TheGameOfLIfeMod implements ModInitializer {
@@ -43,7 +40,6 @@ public class TheGameOfLIfeMod implements ModInitializer {
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 	private static MinecraftServer SERVER;
 
-	public static final Set<LevelChunk> LOADED_CHUNKS = ConcurrentHashMap.newKeySet();
 
 	public static final Map<String, Runnable> COMMAND_MAP = new HashMap<>();
 
@@ -55,23 +51,25 @@ public class TheGameOfLIfeMod implements ModInitializer {
 	}
 
 
+	public static final Set<LevelChunk> LOADED_CHUNKS = ConcurrentHashMap.newKeySet();
+
+	// Две очереди: просчет теней и отправка готовых пакетов
+	public static final ConcurrentLinkedQueue<ChunkUpdateData> LIGHT_CALC_QUEUE = new ConcurrentLinkedQueue<>();
+	public static final ConcurrentLinkedQueue<ChunkUpdateData> LIGHT_PACKET_QUEUE = new ConcurrentLinkedQueue<>();
+
+	public static class ChunkUpdateData {
+		public LevelChunk chunk;
+		public LongArrayList changedPositions = new LongArrayList();
+		public int currentLightIndex = 0;
+
+		public ChunkUpdateData(LevelChunk c) {
+			this.chunk = c;
+		}
+	}
 
 
 	@Override
 	public void onInitialize() {
-
-
-		// Подписываемся на загрузку чанка
-		ServerChunkEvents.CHUNK_LOAD.register((level, chunk) -> {
-			LOADED_CHUNKS.add(chunk);
-		});
-
-		// Подписываемся на выгрузку чанка
-		ServerChunkEvents.CHUNK_UNLOAD.register((level, chunk) -> {
-			LOADED_CHUNKS.remove(chunk);
-		});
-
-		System.out.println("Мой мод успешно запущен и начал следить за чанками!");
 
 		// Получаем сервер (официальный lifecycle event)
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> SERVER = s);
@@ -88,16 +86,52 @@ public class TheGameOfLIfeMod implements ModInitializer {
 				COMMAND_MAP.get(text).run();// действие из словаря
 			}
 		});
-	}
 
 
-	private void onWorldLoaded(ServerLevel world) {
-		LOGGER.info("Overworld is fully loaded.");
-		runCommand("pos1 -300 -64 -300");
-		runCommand("pos2 300 319 300");
-		// Здесь можно выполнять команды, удалять блоки и т. д.
-		// Например:
-		// runCommand(server, "tick freeze");
+		ServerChunkEvents.CHUNK_LOAD.register((level, chunk) -> LOADED_CHUNKS.add(chunk));
+		ServerChunkEvents.CHUNK_UNLOAD.register((level, chunk) -> LOADED_CHUNKS.remove(chunk));
+
+		ServerTickEvents.END_SERVER_TICK.register(server -> {
+
+			// 1. ПЛАВНАЯ РАССЫЛКА СВЕТА (Строго по 2 чанка в тик!)
+			// Это навсегда убьет зависание сервера на 34 секунды.
+			int packetsSentThisTick = 0;
+			while (!LIGHT_PACKET_QUEUE.isEmpty() && packetsSentThisTick < 2) {
+				ChunkUpdateData data = LIGHT_PACKET_QUEUE.poll();
+
+				LevelLightEngine lightEngine = data.chunk.getLevel().getLightEngine();
+				ClientboundLevelChunkWithLightPacket packet = new ClientboundLevelChunkWithLightPacket(data.chunk, lightEngine, null, null);
+
+				ChunkPos pos = data.chunk.getPos();
+				for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+					if (player.level() == data.chunk.getLevel() && player.distanceToSqr(pos.x * 16, player.getY(), pos.z * 16) < 16384) {
+						player.connection.send(packet);
+					}
+				}
+				packetsSentThisTick++;
+			}
+
+			// 2. КОРМЛЕНИЕ ДВИЖКА СВЕТА (20 000 блоков в тик)
+			int lightBlocksProcessed = 0;
+			while (!LIGHT_CALC_QUEUE.isEmpty() && lightBlocksProcessed < 20000) {
+				ChunkUpdateData data = LIGHT_CALC_QUEUE.peek();
+				LevelLightEngine lightEngine = data.chunk.getLevel().getLightEngine();
+				BlockPos.MutableBlockPos syncPos = new BlockPos.MutableBlockPos();
+
+				while (data.currentLightIndex < data.changedPositions.size() && lightBlocksProcessed < 20000) {
+					syncPos.set(data.changedPositions.getLong(data.currentLightIndex));
+					lightEngine.checkBlock(syncPos);
+					data.currentLightIndex++;
+					lightBlocksProcessed++;
+				}
+
+				if (data.currentLightIndex >= data.changedPositions.size()) {
+					LIGHT_CALC_QUEUE.poll();
+					// Как только свет просчитан, отдаем чанк в очередь на отправку пакета
+					LIGHT_PACKET_QUEUE.add(data);
+				}
+			}
+		});
 	}
 
 
@@ -114,22 +148,22 @@ public class TheGameOfLIfeMod implements ModInitializer {
 		}
 	}
 
+
 	public static void removeAll(ServerLevel level, Set<Block> targetBlocks) {
 		long startTime = System.currentTimeMillis();
 		BlockState air = Blocks.AIR.defaultBlockState();
 
-		// 1. Уходим в фон. Основной сервер летит без лагов!
-		CompletableFuture.runAsync(() -> {
-			int blocksRemoved = 0;
-			List<LevelChunk> modifiedChunks = new ArrayList<>();
-
-			LevelLightEngine lightEngine = level.getLightEngine();
+		// 1. ФОН: Бесшумная разведка
+		CompletableFuture.supplyAsync(() -> {
+			List<ChunkUpdateData> processedChunks = new ArrayList<>();
 			BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
 
 			for (LevelChunk chunk : LOADED_CHUNKS) {
 				if (chunk.getLevel() != level) continue;
 
-				boolean chunkModified = false;
+				ChunkUpdateData data = new ChunkUpdateData(chunk);
+				boolean modified = false;
+
 				LevelChunkSection[] sections = chunk.getSections();
 				int startX = chunk.getPos().getMinBlockX();
 				int startZ = chunk.getPos().getMinBlockZ();
@@ -137,8 +171,6 @@ public class TheGameOfLIfeMod implements ModInitializer {
 				for (int i = 0; i < sections.length; i++) {
 					LevelChunkSection section = sections[i];
 					if (section == null || section.hasOnlyAir()) continue;
-
-					// Наш мощный фильтр палетки
 					if (!section.getStates().maybeHas(state -> targetBlocks.contains(state.getBlock()))) continue;
 
 					int startY = -64 + (i * 16);
@@ -146,53 +178,59 @@ public class TheGameOfLIfeMod implements ModInitializer {
 					for (int x = 0; x < 16; x++) {
 						for (int z = 0; z < 16; z++) {
 							for (int y = 0; y < 16; y++) {
-
 								int realY = startY + y;
 								mutablePos.set(startX + x, realY, startZ + z);
 
 								if (targetBlocks.contains(chunk.getBlockState(mutablePos).getBlock())) {
-
-									// МЕНЯЕМ БЛОК В ФОНЕ (Максимальная скорость)
-									chunk.setBlockState(mutablePos, air);
-
-									// ОБНОВЛЯЕМ СВЕТ В ФОНЕ (Сразу же, внутри цикла)
-									lightEngine.checkBlock(mutablePos);
-
-									blocksRemoved++;
-									chunkModified = true;
+									data.changedPositions.add(mutablePos.asLong());
+									modified = true;
 								}
 							}
 						}
 					}
 				}
-
-				if (chunkModified) {
-					modifiedChunks.add(chunk);
+				if (modified) {
+					processedChunks.add(data);
 				}
 			}
+			return processedChunks;
 
-			final int finalRemoved = blocksRemoved;
+			// 2. ГЛАВНЫЙ ПОТОК: Мгновенный удар
+		}).thenAcceptAsync(processedChunks -> {
+			if (processedChunks.isEmpty()) return;
 
-			// 2. Возвращаемся в Главный поток ТОЛЬКО чтобы отправить пакеты
-			level.getServer().execute(() -> {
-				for (LevelChunk chunk : modifiedChunks) {
-					// Сохраняем чанк на диск
-					chunk.markUnsaved();
+			LevelLightEngine lightEngine = level.getLightEngine();
+			BlockPos.MutableBlockPos syncPos = new BlockPos.MutableBlockPos();
+			int totalBlocksRemoved = 0;
 
-					ChunkPos pos = chunk.getPos();
-					ClientboundLevelChunkWithLightPacket packet = new ClientboundLevelChunkWithLightPacket(chunk, lightEngine, null, null);
+			// ВЕСЬ этот цикл выполнится за 1 тик.
+			for (ChunkUpdateData data : processedChunks) {
 
-					// Рассылаем игрокам поблизости
-					for (ServerPlayer player : level.players()) {
-						if (player.distanceToSqr(pos.x * 16, player.getY(), pos.z * 16) < 16384) {
-							player.connection.send(packet);
-						}
+				// Физически удаляем все блоки чанка
+				for (int i = 0; i < data.changedPositions.size(); i++) {
+					syncPos.set(data.changedPositions.getLong(i));
+					data.chunk.setBlockState(syncPos, air);
+					totalBlocksRemoved++;
+				}
+				data.chunk.markUnsaved();
+
+				ChunkPos pos = data.chunk.getPos();
+
+				// Отправляем пакет мгновенно. Игроки видят резкое исчезновение!
+				ClientboundLevelChunkWithLightPacket packet = new ClientboundLevelChunkWithLightPacket(data.chunk, lightEngine, null, null);
+				for (ServerPlayer player : level.players()) {
+					if (player.distanceToSqr(pos.x * 16, player.getY(), pos.z * 16) < 16384) {
+						player.connection.send(packet);
 					}
 				}
-				System.out.println("Молниеносная очистка: Удалено " + finalRemoved + " блоков за " + (System.currentTimeMillis() - startTime) + " мс.");
-			});
 
-		}, Util.backgroundExecutor());
+				// Передаем чанк в дозатор, чтобы он медленно исправил тени
+				LIGHT_CALC_QUEUE.add(data);
+			}
+
+			System.out.println("ЩЕЛЧОК ТАНОСА! Убрано " + totalBlocksRemoved + " блоков за " + (System.currentTimeMillis() - startTime) + " мс.");
+
+		}, level.getServer());
 	}
 
 
