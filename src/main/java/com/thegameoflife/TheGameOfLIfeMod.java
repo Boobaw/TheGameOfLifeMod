@@ -1,29 +1,15 @@
 package com.thegameoflife;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ChunkMap;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 
-
-import com.fastasyncworldedit.fabric.FabricTaskManager;
-import com.sk89q.worldedit.EditSession;
-import com.sk89q.worldedit.EditSessionBuilder;
-import com.sk89q.worldedit.WorldEdit;
-import com.sk89q.worldedit.fabric.FabricAdapter;
-import com.sk89q.worldedit.function.mask.BlockTypeMask;
-import com.sk89q.worldedit.math.BlockVector3;
-import com.sk89q.worldedit.regions.CuboidRegion;
-import com.sk89q.worldedit.world.World;
-
-
-import com.sk89q.worldedit.fabric.FabricWorld;
-import com.fastasyncworldedit.fabric.FaweFabric;
-import com.fastasyncworldedit.fabric.FabricQueueHandler;
-
-
-
-
-import com.sk89q.worldedit.world.block.BlockTypes;
 import net.fabricmc.api.ModInitializer;
 import net.minecraft.server.level.ServerLevel;
 
-
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.commands.CommandSourceStack;
@@ -32,15 +18,15 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Text;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+
 
 
 public class TheGameOfLIfeMod implements ModInitializer {
@@ -48,13 +34,15 @@ public class TheGameOfLIfeMod implements ModInitializer {
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 	private static MinecraftServer SERVER;
 
+	public static final Set<LevelChunk> LOADED_CHUNKS = ConcurrentHashMap.newKeySet();
+
 	public static final Map<String, Runnable> COMMAND_MAP = new HashMap<>();
 
 	// Большой блок действий на слова
 	static {
 		COMMAND_MAP.put("stop", () -> runCommand("tick freeze"));
 		COMMAND_MAP.put("start", () -> runCommand("tick unfreeze"));
-		COMMAND_MAP.put("dirt", () -> printLoadedChunks(SERVER.overworld()));
+		//COMMAND_MAP.put("dirt", () -> printLoadedChunks(SERVER.overworld()));
 	}
 
 
@@ -62,9 +50,14 @@ public class TheGameOfLIfeMod implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
+		VoiceNetworking.registerPayloads();
 
 		// Получаем сервер (официальный lifecycle event)
-		ServerLifecycleEvents.SERVER_STARTED.register(s -> SERVER = s);
+		ServerLifecycleEvents.SERVER_STARTED.register(s -> {
+			SERVER = s;
+			VoiceServer.init();
+		});
+		ServerLifecycleEvents.SERVER_STOPPING.register(s -> VoiceServer.shutdown());
 
 		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
 
@@ -80,11 +73,11 @@ public class TheGameOfLIfeMod implements ModInitializer {
 		});
 	}
 
+
 	private void onWorldLoaded(ServerLevel world) {
 		LOGGER.info("Overworld is fully loaded.");
 		runCommand("pos1 -300 -64 -300");
 		runCommand("pos2 300 319 300");
-
 		// Здесь можно выполнять команды, удалять блоки и т. д.
 		// Например:
 		// runCommand(server, "tick freeze");
@@ -104,37 +97,97 @@ public class TheGameOfLIfeMod implements ModInitializer {
 		}
 	}
 
+	public static void removeAll(ServerLevel level) {
+		// Засекаем время, чтобы узнать, насколько быстро сработал наш код
+		long startTime = System.currentTimeMillis();
+		int blocksRemoved = 0;
 
-	public static void removeAll(ServerLevel mcWorld) {
+		// Кешируем нужные состояния, чтобы не доставать их из памяти миллион раз
+		BlockState air = Blocks.AIR.defaultBlockState();
 
-		var weWorld = FabricAdapter.adapt(mcWorld);
+		// СЕКРЕТ №1: Создаем ОДИН изменяемый объект координат
+		BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
 
-		var min = BlockVector3.at(-300, -64, -300);
-		var max = BlockVector3.at(300, 319, 300);
+		// Проходим по нашему списку загруженных чанков
+		for (LevelChunk chunk : LOADED_CHUNKS) {
 
-		var region = new CuboidRegion(weWorld, min, max);
+			// ВАЖНАЯ ПРОВЕРКА: Наш список хранит чанки из ВСЕХ измерений (Обычный мир, Ад, Энд).
+			// Нам нужно убедиться, что чанк принадлежит тому миру, который мы сейчас обрабатываем.
+			if (chunk.getLevel() != level) {
+				continue;
+			}
 
-		try (EditSession editSession = WorldEdit.getInstance()
-				.newEditSessionBuilder()
-				.world(weWorld)
-				.maxBlocks(-1) // без лимита
-				.build()) {
+			// Получаем реальные координаты начала чанка в мире
+			int startX = chunk.getPos().getMinBlockX();
+			int startZ = chunk.getPos().getMinBlockZ();
 
-			// отключаем историю
-			editSession.setReorderMode(EditSession.ReorderMode.FAST);
+			// Получаем высоту мира (например, от -64 до 320)
+			int minY = -64;
+			int maxY = 319;
 
-			editSession.replaceBlocks(
-					region,
-					new BlockTypeMask(editSession, BlockTypes.DIRT),
-					BlockTypes.AIR.getDefaultState().toBaseBlock()
-			);
+			// Проходим по всем координатам внутри этого чанка (16x16 в ширину, и вся высота мира)
+			for (int x = 0; x < 16; x++) {
+				for (int z = 0; z < 16; z++) {
+					for (int y = minY; y < maxY; y++) {
 
-			editSession.flushSession(); // ОБЯЗАТЕЛЬНО для FAWE
+						// Обновляем нашу единственную координату (без создания новых объектов!)
+						mutablePos.set(startX + x, y, startZ + z);
 
-		} catch (Exception e) {
-			LOGGER.error("Failed to remove dirt blocks", e);
+						// СЕКРЕТ №2: Мы обращаемся к chunk.getBlockState, а не к level.getBlockState.
+						// Это в разы быстрее, так как игра не тратит время на поиск чанка.
+						if (chunk.getBlockState(mutablePos).is(Blocks.STONE)) {
+
+							// СЕКРЕТ №3: Магические флаги оптимизации Minecraft.
+							// 2 = отправить обновление игрокам (чтобы они не видели блоков-призраков).
+							// 16 = не обновлять форму соседних блоков (запрещает перерисовку заборов и т.д.).
+							// 32 = запретить выпадение предмета (чтобы сервер не заспавнил миллион блоков земли на полу).
+							int flags = 2 | 16 | 32;
+
+							// Заменяем блок
+							level.setBlock(mutablePos, air, flags);
+							blocksRemoved++;
+						}
+					}
+				}
+			}
 		}
+
+		// Выводим результат в консоль сервера
+		System.out.println("Готово! Удалено " + blocksRemoved + " блоков земли за " + (System.currentTimeMillis() - startTime) + " мс.");
 	}
+
+
+
+//	public static void removeAll(ServerLevel mcWorld) {
+//
+//		var weWorld = FabricAdapter.adapt(mcWorld);
+//
+//		var min = BlockVector3.at(-300, -64, -300);
+//		var max = BlockVector3.at(300, 319, 300);
+//
+//		var region = new CuboidRegion(weWorld, min, max);
+//
+//		try (EditSession editSession = WorldEdit.getInstance()
+//				.newEditSessionBuilder()
+//				.world(weWorld)
+//				.maxBlocks(-1) // без лимита
+//				.build()) {
+//
+//			// отключаем историю
+//			editSession.setReorderMode(EditSession.ReorderMode.FAST);
+//
+//			editSession.replaceBlocks(
+//					region,
+//					new BlockTypeMask(editSession, BlockTypes.DIRT),
+//					BlockTypes.AIR.getDefaultState().toBaseBlock()
+//			);
+//
+//			editSession.flushSession(); // ОБЯЗАТЕЛЬНО для FAWE
+//
+//		} catch (Exception e) {
+//			LOGGER.error("Failed to remove dirt blocks", e);
+//		}
+//	}
 
 //	public void removeAllDirt(ServerLevel mcWorld) {
 //
@@ -163,58 +216,37 @@ public class TheGameOfLIfeMod implements ModInitializer {
 //		queue.flush(); // FAWE сама распределяет по чанкам и потокам
 //	}
 
-	private static final AtomicInteger TASK_COUNTER = new AtomicInteger(0);
-
-//	public static void removeAllDirt(ServerLevel mcWorld, FabricTaskManager taskManager) {
-//		// Адаптируем мир к WorldEdit
-//		World weWorld = FabricAdapter.adapt(mcWorld);
+//	public static void removeAllDirt(ServerLevel mcWorld) {
+//		// Получаем FAWE адаптер для мира
+//		var weWorld = com.fastasyncworldedit.fabric.FabricAdapter.adapt(mcWorld);
 //
-//		// Берём все реально загруженные чанки
-//		mcWorld.getChunkSource().chunkMap.getChunks().forEach(chunkHolder -> {
-//			LevelChunk chunk = chunkHolder.getTickingChunk();
-//			if (chunk == null) return;
+//		// Получаем TaskManager
+//		TaskManager taskManager = FabricWorldEdit.inst.getTaskManager();
 //
-//			// Рассчитываем координаты чанка
-//			int chunkX = chunk.getPos().x << 4;
-//			int chunkZ = chunk.getPos().z << 4;
-//			int minY = mcWorld.getMinBuildHeight();
-//			int maxY = mcWorld.getMaxBuildHeight() - 1;
+//		// Получаем QueueHandler
+//		QueueHandler queue = FabricWorldEdit.inst.getQueueHandler();
 //
-//			// Создаём регион чанка
-//			BlockVector3 min = BlockVector3.at(chunkX, minY, chunkZ);
-//			BlockVector3 max = BlockVector3.at(chunkX + 15, maxY, chunkZ + 15);
-//			CuboidRegion region = new CuboidRegion(weWorld, min, max);
+//		// Асинхронно ставим задачу
+//		taskManager.async(() -> {
+//			for (LevelChunk chunk : mcWorld.getChunkSource().chunkMap.getChunks()) {
+//				// Определяем регион для чанка
+//				BlockVector3 min = BlockVector3.at(chunk.getPos().getMinBlockX(),
+//						mcWorld.getMinBuildHeight(),
+//						chunk.getPos().getMinBlockZ());
+//				BlockVector3 max = BlockVector3.at(chunk.getPos().getMaxBlockX(),
+//						mcWorld.getMaxBuildHeight() - 1,
+//						chunk.getPos().getMaxBlockZ());
 //
-//			// Асинхронная задача на замену блоков
-//			taskManager.async(() -> {
-//				try (EditSession editSession = WorldEdit.getInstance()
-//						.newEditSessionBuilder()
-//						.world(weWorld)
-//						.maxBlocks(1_000_000_000)
-//						.build()) {
+//				var region = new com.fastasyncworldedit.core.regions.FaweCuboidRegion(weWorld, min, max);
 //
-//					editSession.replaceBlocks(
-//							region,
-//							new BlockTypeMask(editSession, BlockTypes.DIRT),
-//							BlockTypes.AIR.getDefaultState().toBaseBlock()
-//					);
+//				// Ставим задачу на замену блоков через очередь FAWE
+//				queue.add(region,
+//						new com.fastasyncworldedit.core.function.mask.BlockTypeMask(region, BlockTypes.DIRT),
+//						BlockTypes.AIR.getDefaultState().toBaseBlock());
+//			}
 //
-//					System.out.println("Chunk cleaned: " + chunk.getPos());
-//				} catch (Exception e) {
-//					e.printStackTrace();
-//				} finally {
-//					TASK_COUNTER.decrementAndGet();
-//				}
-//			});
-//
-//			TASK_COUNTER.incrementAndGet();
+//			// После добавления всех чанков — выполняем очередь
+//			queue.flush();
 //		});
-//	}
-//
-//	public static boolean isCleaningInProgress() {
-//		return TASK_COUNTER.get() > 0;
-//	}
-
-
 }
 
