@@ -1,10 +1,17 @@
 package com.thegameoflife;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.server.level.ChunkMap;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Util;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+
+import it.unimi.dsi.fastutil.longs.LongArrayList;
+import it.unimi.dsi.fastutil.longs.LongList;
 
 import net.fabricmc.api.ModInitializer;
 import net.minecraft.server.level.ServerLevel;
@@ -19,11 +26,13 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.lighting.LevelLightEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Text;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -42,7 +51,7 @@ public class TheGameOfLIfeMod implements ModInitializer {
 	static {
 		COMMAND_MAP.put("stop", () -> runCommand("tick freeze"));
 		COMMAND_MAP.put("start", () -> runCommand("tick unfreeze"));
-		COMMAND_MAP.put("dirt", () -> removeAll(SERVER.overworld()));
+		COMMAND_MAP.put("dirt", () -> removeAll(SERVER.overworld(), Set.of(Blocks.STONE)));
 	}
 
 
@@ -105,63 +114,198 @@ public class TheGameOfLIfeMod implements ModInitializer {
 		}
 	}
 
-	public static void removeAll(ServerLevel level) {
-		// Засекаем время, чтобы узнать, насколько быстро сработал наш код
+	public static void removeAll(ServerLevel level, Set<Block> targetBlocks) {
 		long startTime = System.currentTimeMillis();
-		int blocksRemoved = 0;
-
-		// Кешируем нужные состояния, чтобы не доставать их из памяти миллион раз
 		BlockState air = Blocks.AIR.defaultBlockState();
 
-		// СЕКРЕТ №1: Создаем ОДИН изменяемый объект координат
-		BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
+		// 1. Уходим в фон. Основной сервер летит без лагов!
+		CompletableFuture.runAsync(() -> {
+			int blocksRemoved = 0;
+			List<LevelChunk> modifiedChunks = new ArrayList<>();
 
-		// Проходим по нашему списку загруженных чанков
-		for (LevelChunk chunk : LOADED_CHUNKS) {
+			LevelLightEngine lightEngine = level.getLightEngine();
+			BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
 
-			// ВАЖНАЯ ПРОВЕРКА: Наш список хранит чанки из ВСЕХ измерений (Обычный мир, Ад, Энд).
-			// Нам нужно убедиться, что чанк принадлежит тому миру, который мы сейчас обрабатываем.
-			if (chunk.getLevel() != level) {
-				continue;
-			}
+			for (LevelChunk chunk : LOADED_CHUNKS) {
+				if (chunk.getLevel() != level) continue;
 
-			// Получаем реальные координаты начала чанка в мире
-			int startX = chunk.getPos().getMinBlockX();
-			int startZ = chunk.getPos().getMinBlockZ();
+				boolean chunkModified = false;
+				LevelChunkSection[] sections = chunk.getSections();
+				int startX = chunk.getPos().getMinBlockX();
+				int startZ = chunk.getPos().getMinBlockZ();
 
-			// Получаем высоту мира (например, от -64 до 320)
-			int minY = -64;
-			int maxY = 319;
+				for (int i = 0; i < sections.length; i++) {
+					LevelChunkSection section = sections[i];
+					if (section == null || section.hasOnlyAir()) continue;
 
-			// Проходим по всем координатам внутри этого чанка (16x16 в ширину, и вся высота мира)
-			for (int x = 0; x < 16; x++) {
-				for (int z = 0; z < 16; z++) {
-					for (int y = minY; y < maxY; y++) {
+					// Наш мощный фильтр палетки
+					if (!section.getStates().maybeHas(state -> targetBlocks.contains(state.getBlock()))) continue;
 
-						// Обновляем нашу единственную координату (без создания новых объектов!)
-						mutablePos.set(startX + x, y, startZ + z);
+					int startY = -64 + (i * 16);
 
-						// СЕКРЕТ №2: Мы обращаемся к chunk.getBlockState, а не к level.getBlockState.
-						// Это в разы быстрее, так как игра не тратит время на поиск чанка.
-						if (chunk.getBlockState(mutablePos).is(Blocks.STONE)) {
+					for (int x = 0; x < 16; x++) {
+						for (int z = 0; z < 16; z++) {
+							for (int y = 0; y < 16; y++) {
 
-							// СЕКРЕТ №3: Магические флаги оптимизации Minecraft.
-							// 2 = отправить обновление игрокам (чтобы они не видели блоков-призраков).
-							// 16 = не обновлять форму соседних блоков (запрещает перерисовку заборов и т.д.).
-							// 32 = запретить выпадение предмета (чтобы сервер не заспавнил миллион блоков земли на полу).
-							int flags = 2 | 16 | 32;
+								int realY = startY + y;
+								mutablePos.set(startX + x, realY, startZ + z);
 
-							// Заменяем блок
-							level.setBlock(mutablePos, air, flags);
-							blocksRemoved++;
+								if (targetBlocks.contains(chunk.getBlockState(mutablePos).getBlock())) {
+
+									// МЕНЯЕМ БЛОК В ФОНЕ (Максимальная скорость)
+									chunk.setBlockState(mutablePos, air);
+
+									// ОБНОВЛЯЕМ СВЕТ В ФОНЕ (Сразу же, внутри цикла)
+									lightEngine.checkBlock(mutablePos);
+
+									blocksRemoved++;
+									chunkModified = true;
+								}
+							}
 						}
 					}
 				}
-			}
-		}
 
-		// Выводим результат в консоль сервера
-		System.out.println("Готово! Удалено " + blocksRemoved + " блоков земли за " + (System.currentTimeMillis() - startTime) + " мс.");
+				if (chunkModified) {
+					modifiedChunks.add(chunk);
+				}
+			}
+
+			final int finalRemoved = blocksRemoved;
+
+			// 2. Возвращаемся в Главный поток ТОЛЬКО чтобы отправить пакеты
+			level.getServer().execute(() -> {
+				for (LevelChunk chunk : modifiedChunks) {
+					// Сохраняем чанк на диск
+					chunk.markUnsaved();
+
+					ChunkPos pos = chunk.getPos();
+					ClientboundLevelChunkWithLightPacket packet = new ClientboundLevelChunkWithLightPacket(chunk, lightEngine, null, null);
+
+					// Рассылаем игрокам поблизости
+					for (ServerPlayer player : level.players()) {
+						if (player.distanceToSqr(pos.x * 16, player.getY(), pos.z * 16) < 16384) {
+							player.connection.send(packet);
+						}
+					}
+				}
+				System.out.println("Молниеносная очистка: Удалено " + finalRemoved + " блоков за " + (System.currentTimeMillis() - startTime) + " мс.");
+			});
+
+		}, Util.backgroundExecutor());
+	}
+
+
+	public static void removeAll1(ServerLevel level, Block targetBlock) {
+		long startTime = System.currentTimeMillis();
+		BlockState replacementState = Blocks.AIR.defaultBlockState();
+
+		// 1. УХОДИМ В ФОНОВЫЙ ПОТОК (Async)
+		// Сервер продолжит работать без лагов, пока мы перебираем блоки
+		CompletableFuture.runAsync(() -> {
+			int blocksReplaced = 0;
+			List<LevelChunk> modifiedChunks = new ArrayList<>();
+
+			LevelLightEngine lightEngine = level.getLightEngine();
+			BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
+
+			for (LevelChunk chunk : LOADED_CHUNKS) {
+				if (chunk.getLevel() != level) continue;
+
+				boolean chunkModified = false;
+
+				// МАГИЯ СВЕТА: Массивы для хранения самой высокой и самой низкой точки в столбце.
+				// В чанке 16x16 = 256 вертикальных столбцов.
+				int[] highestY = new int[256];
+				int[] lowestY = new int[256];
+				for (int j = 0; j < 256; j++) {
+					highestY[j] = Integer.MIN_VALUE;
+					lowestY[j] = Integer.MAX_VALUE;
+				}
+
+				LevelChunkSection[] sections = chunk.getSections();
+				int startX = chunk.getPos().getMinBlockX();
+				int startZ = chunk.getPos().getMinBlockZ();
+
+				for (int i = 0; i < sections.length; i++) {
+					LevelChunkSection section = sections[i];
+
+					if (section == null || section.hasOnlyAir()) continue;
+					if (!section.getStates().maybeHas(state -> state.is(targetBlock))) continue;
+
+					int startY = -64 + (i * 16);
+
+					for (int x = 0; x < 16; x++) {
+						for (int z = 0; z < 16; z++) {
+							for (int y = 0; y < 16; y++) {
+
+								int realY = startY + y;
+								mutablePos.set(startX + x, realY, startZ + z);
+
+								if (chunk.getBlockState(mutablePos).is(targetBlock)) {
+
+									// Меняем блок в памяти чанка
+									chunk.setBlockState(mutablePos, replacementState);
+
+									// ВЫНОСИМ СВЕТ: Запоминаем только самую высокую и низкую точку
+									int index = x + z * 16;
+									if (realY > highestY[index]) highestY[index] = realY;
+									if (realY < lowestY[index]) lowestY[index] = realY;
+
+									blocksReplaced++;
+									chunkModified = true;
+								}
+							}
+						}
+					}
+				}
+
+				// ПОСЛЕ ПРОХОЖДЕНИЯ ВСЕХ СЕКЦИЙ ЧАНКА:
+				if (chunkModified) {
+					// Перебираем наши 256 столбцов и пингуем свет только по краям
+					for (int x = 0; x < 16; x++) {
+						for (int z = 0; z < 16; z++) {
+							int index = x + z * 16;
+							if (highestY[index] != Integer.MIN_VALUE) {
+
+								// Запрос света для "крыши" изменения
+								mutablePos.set(startX + x, highestY[index], startZ + z);
+								lightEngine.checkBlock(mutablePos);
+
+								// Запрос света для "пола" (чтобы тени внизу пересчитались)
+								if (lowestY[index] != highestY[index]) {
+									mutablePos.set(startX + x, lowestY[index], startZ + z);
+									lightEngine.checkBlock(mutablePos);
+								}
+							}
+						}
+					}
+					modifiedChunks.add(chunk);
+				}
+			}
+
+			final int finalReplaced = blocksReplaced;
+
+			// 2. ВОЗВРАЩАЕМСЯ В ОСНОВНОЙ ПОТОК (Sync)
+			// Сеть и сохранение файлов можно делать только в главном потоке!
+			level.getServer().execute(() -> {
+
+				for (LevelChunk chunk : modifiedChunks) {
+					chunk.markUnsaved();
+					ChunkPos pos = chunk.getPos();
+					ClientboundLevelChunkWithLightPacket packet = new ClientboundLevelChunkWithLightPacket(chunk, lightEngine, null, null);
+
+					for (ServerPlayer player : level.players()) {
+						if (player.distanceToSqr(pos.x * 16, player.getY(), pos.z * 16) < 16384) {
+							player.connection.send(packet);
+						}
+					}
+				}
+
+				System.out.println("УМНАЯ Асинхронная замена завершена! Заменено: " + finalReplaced + " блоков за " + (System.currentTimeMillis() - startTime) + " мс.");
+			});
+
+		}, Util.backgroundExecutor());
 	}
 
 
