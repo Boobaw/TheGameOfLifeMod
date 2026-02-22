@@ -35,6 +35,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 import static com.thegameoflife.WorldHacker.banAndSnap;
+import static com.thegameoflife.WorldHacker.unbanAndSnap;
 
 
 public class TheGameOfLifeMod implements ModInitializer {
@@ -48,18 +49,26 @@ public class TheGameOfLifeMod implements ModInitializer {
 	static {
 		COMMAND_MAP.put("stop", () -> runCommand("tick freeze"));
 		COMMAND_MAP.put("start", () -> runCommand("tick unfreeze"));
-		COMMAND_MAP.put("dirt", () -> banAndSnap(SERVER.overworld(), Set.of(Blocks.STONE)));
+		COMMAND_MAP.put("dirt", () -> banAndSnap(Set.of(Blocks.DIRT)));
+		COMMAND_MAP.put("undirt", () -> unbanAndSnap(Set.of(Blocks.DIRT)));
+		COMMAND_MAP.put("stone", () -> banAndSnap(Set.of(Blocks.STONE)));
+		COMMAND_MAP.put("unstone", () -> unbanAndSnap(Set.of(Blocks.STONE)));
 	}
 
 
-	// Память нейросети
+	// Текущие списки правил
 	public static final Set<Block> BANNED_BLOCKS = ConcurrentHashMap.newKeySet();
+	public static final Set<Block> UNBANNED_BLOCKS = ConcurrentHashMap.newKeySet(); // НОВОЕ: Буфер для возврата
 
 	// Эпоха правил
 	public static int currentRuleVersion = 0;
 
 	// Карта версий чанков: [ChunkPos -> Версия]
 	public static final ConcurrentHashMap<Long, Integer> CHUNK_VERSIONS = new ConcurrentHashMap<>();
+
+	// НОВОЕ: Глобальный Архив Памяти
+	// Формат: [Координата Чанка -> [Координата Блока -> Состояние Блока]]
+	public static final ConcurrentHashMap<Long, ConcurrentHashMap<Long, BlockState>> CHUNK_MEMORY = new ConcurrentHashMap<>();
 
 	// Очереди для плавного света
 	public static final ConcurrentLinkedQueue<WorldHacker.ChunkUpdateData> LIGHT_CALC_QUEUE = new ConcurrentLinkedQueue<>();
@@ -79,12 +88,10 @@ public class TheGameOfLifeMod implements ModInitializer {
 			WorldHacker.processLightQueues(server);
 		});
 
+		// Времменный блок для тестов
 		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
-
 			String text = message.signedContent();             // текст сообщения
 			String playerName = sender.getName().getString();  // имя игрока
-
-			LOGGER.info("Player {} said: {}", playerName, text);
 
 			// 🔹 Проверяем совпадения
 			if (COMMAND_MAP.containsKey(text)) {
@@ -94,9 +101,7 @@ public class TheGameOfLifeMod implements ModInitializer {
 	}
 
 	private static void runCommand(String command) {
-
 		CommandSourceStack source = SERVER.createCommandSourceStack();
-
 		try {
 			SERVER.getCommands()
 					.getDispatcher()
