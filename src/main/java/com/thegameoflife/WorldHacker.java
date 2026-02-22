@@ -16,13 +16,17 @@ import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.lighting.LevelLightEngine;
+
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class WorldHacker {
+    // УМНАЯ ОЧЕРЕДЬ: хранит задачи, которые сейчас в процессе, чтобы не спамить потоки
+    private static final ConcurrentHashMap<Long, Integer> PENDING_TASKS = new ConcurrentHashMap<>();
+
     public static void tickRadar(MinecraftServer server) {
-        // Тут можно вставить блок на сон ядра до старта игры
+        int targetVersion = TheGameOfLifeMod.currentRuleVersion;
 
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             ServerLevel level = (ServerLevel) player.level();
@@ -33,16 +37,18 @@ public class WorldHacker {
                 for (int z = -viewDist; z <= viewDist; z++) {
                     long posLong = ChunkPos.asLong(pPos.x + x, pPos.z + z);
 
-                    // 1. Сначала быстрая проверка по памяти (чтобы не дергать ядро игры)
-                    if (TheGameOfLifeMod.CHUNK_VERSIONS.getOrDefault(posLong, 0) < TheGameOfLifeMod.currentRuleVersion) {
+                    // 1. Проверяем, не обновлен ли уже чанк, И не находится ли он прямо сейчас в обработке
+                    if (TheGameOfLifeMod.CHUNK_VERSIONS.getOrDefault(posLong, 0) < targetVersion &&
+                            PENDING_TASKS.getOrDefault(posLong, 0) < targetVersion) {
 
-                        // 2. Достаем чанк без пролагов генерации
                         LevelChunk chunk = level.getChunkSource().getChunkNow(pPos.x + x, pPos.z + z);
 
                         if (chunk != null) {
-                            // 3. Бронируем новую эпоху и отправляем в мясорубку
-                            TheGameOfLifeMod.CHUNK_VERSIONS.put(posLong, TheGameOfLifeMod.currentRuleVersion);
-                            processChunkRulesAsync(level, chunk);
+                            // 2. Бронируем задачу в очереди (но НЕ помечаем как выполненную!)
+                            PENDING_TASKS.put(posLong, targetVersion);
+
+                            // Передаем targetVersion, чтобы поток знал свою "Эпоху"
+                            processChunkRulesAsync(level, chunk, targetVersion);
                         }
                     }
                 }
@@ -51,7 +57,9 @@ public class WorldHacker {
     }
 
     // =========================================
-    // 1. УПРАВЛЕНИЕ ЦЕЛЫМИ БЛОКАМИ (Block -> Air)
+    // МЕТОДЫ УПРАВЛЕНИЯ ЭПОХАМИ
+    // При каждом вызове currentRuleVersion увеличивается,
+    // что автоматически "убивает" все старые асинхронные задачи.
     // =========================================
     public static void banBlocksAndSnap(Set<Block> targets) {
         TheGameOfLifeMod.UNBANNED_BLOCKS.removeAll(targets);
@@ -67,43 +75,36 @@ public class WorldHacker {
         System.out.println("!!! РАЗБАН БЛОКОВ: Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
-    // =========================================
-    // 2. УНИЧТОЖЕНИЕ СОСТОЯНИЙ (StateFilter -> Воздух)
-    // =========================================
     public static void banBreakFiltersAndSnap(Set<StateFilter> targets) {
-        TheGameOfLifeMod.UNBANNED_BREAK_FILTERS.removeAll(targets); // Убираем из амнистии
-        TheGameOfLifeMod.BANNED_BREAK_FILTERS.addAll(targets);      // Добавляем в бан
-        TheGameOfLifeMod.currentRuleVersion++;                      // Щелчок!
+        TheGameOfLifeMod.UNBANNED_BREAK_FILTERS.removeAll(targets);
+        TheGameOfLifeMod.BANNED_BREAK_FILTERS.addAll(targets);
+        TheGameOfLifeMod.currentRuleVersion++;
         System.out.println("!!! БАН ФИЛЬТРОВ (УНИЧТОЖЕНИЕ): Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
     public static void unbanBreakFiltersAndSnap(Set<StateFilter> targets) {
-        TheGameOfLifeMod.BANNED_BREAK_FILTERS.removeAll(targets);   // Убираем из бана
-        TheGameOfLifeMod.UNBANNED_BREAK_FILTERS.addAll(targets);    // Отправляем в буфер возврата
-        TheGameOfLifeMod.currentRuleVersion++;                      // Щелчок!
+        TheGameOfLifeMod.BANNED_BREAK_FILTERS.removeAll(targets);
+        TheGameOfLifeMod.UNBANNED_BREAK_FILTERS.addAll(targets);
+        TheGameOfLifeMod.currentRuleVersion++;
         System.out.println("!!! РАЗБАН ФИЛЬТРОВ (УНИЧТОЖЕНИЕ): Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
-    // =========================================
-    // 3. ОБНУЛЕНИЕ СОСТОЯНИЙ (StateFilter -> Дефолтное состояние)
-    // =========================================
     public static void banResetFiltersAndSnap(Set<StateFilter> targets) {
-        TheGameOfLifeMod.UNBANNED_RESET_FILTERS.removeAll(targets); // Убираем из амнистии
-        TheGameOfLifeMod.BANNED_RESET_FILTERS.addAll(targets);      // Добавляем в бан
-        TheGameOfLifeMod.currentRuleVersion++;                      // Щелчок!
+        TheGameOfLifeMod.UNBANNED_RESET_FILTERS.removeAll(targets);
+        TheGameOfLifeMod.BANNED_RESET_FILTERS.addAll(targets);
+        TheGameOfLifeMod.currentRuleVersion++;
         System.out.println("!!! БАН ФИЛЬТРОВ (ОБНУЛЕНИЕ): Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
     public static void unbanResetFiltersAndSnap(Set<StateFilter> targets) {
-        TheGameOfLifeMod.BANNED_RESET_FILTERS.removeAll(targets);   // Убираем из бана
-        TheGameOfLifeMod.UNBANNED_RESET_FILTERS.addAll(targets);    // Отправляем в буфер возврата
-        TheGameOfLifeMod.currentRuleVersion++;                      // Щелчок!
+        TheGameOfLifeMod.BANNED_RESET_FILTERS.removeAll(targets);
+        TheGameOfLifeMod.UNBANNED_RESET_FILTERS.addAll(targets);
+        TheGameOfLifeMod.currentRuleVersion++;
         System.out.println("!!! РАЗБАН ФИЛЬТРОВ (ОБНУЛЕНИЕ): Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
 
-    public static void processChunkRulesAsync(ServerLevel level, LevelChunk chunk) {
-        // 1. Предохранители: проверяем, есть ли вообще работа для Радара по 6 спискам
+    public static void processChunkRulesAsync(ServerLevel level, LevelChunk chunk, int taskVersion) {
         boolean nothingToBan = TheGameOfLifeMod.BANNED_BLOCKS.isEmpty() &&
                 TheGameOfLifeMod.BANNED_BREAK_FILTERS.isEmpty() &&
                 TheGameOfLifeMod.BANNED_RESET_FILTERS.isEmpty();
@@ -112,19 +113,23 @@ public class WorldHacker {
                 TheGameOfLifeMod.UNBANNED_BREAK_FILTERS.isEmpty() &&
                 TheGameOfLifeMod.UNBANNED_RESET_FILTERS.isEmpty();
 
-        if (nothingToBan && nothingToUnban) return;
+        if (nothingToBan && nothingToUnban) {
+            PENDING_TASKS.remove(chunk.getPos().toLong());
+            return;
+        }
 
         BlockState air = Blocks.AIR.defaultBlockState();
         long chunkPosLong = chunk.getPos().toLong();
 
         CompletableFuture.supplyAsync(() -> {
             try {
+                // KILL SWITCH #1: Проверка на старте потока
+                if (TheGameOfLifeMod.currentRuleVersion != taskVersion) return null;
+
                 ChunkUpdateData data = new ChunkUpdateData(chunk);
                 BlockPos.MutableBlockPos mPos = new BlockPos.MutableBlockPos();
 
-                // ==========================================
                 // ФАЗА 1: ВОССТАНОВЛЕНИЕ ИЗ АРХИВА (UNBAN)
-                // ==========================================
                 ConcurrentHashMap<Long, BlockState> chunkMemory = TheGameOfLifeMod.CHUNK_MEMORY.get(chunkPosLong);
 
                 if (chunkMemory != null && !chunkMemory.isEmpty() && !nothingToUnban) {
@@ -132,7 +137,6 @@ public class WorldHacker {
                         long blockPosLong = entry.getKey();
                         BlockState savedState = entry.getValue();
 
-                        // Проверяем по трём спискам амнистии с использованием StateFilter
                         boolean isUnbanned = TheGameOfLifeMod.UNBANNED_BLOCKS.contains(savedState.getBlock()) ||
                                 StateFilter.check(TheGameOfLifeMod.UNBANNED_BREAK_FILTERS, savedState) ||
                                 StateFilter.check(TheGameOfLifeMod.UNBANNED_RESET_FILTERS, savedState);
@@ -141,8 +145,6 @@ public class WorldHacker {
                             mPos.set(blockPosLong);
                             BlockState currentState = chunk.getBlockState(mPos);
 
-                            // Разрешаем вернуть блок, если на его месте пустота, жидкость,
-                            // ИЛИ если это тот же самый блок (например, сухая ступенька снова станет мокрой)
                             boolean canOverwrite = currentState.isAir() ||
                                     currentState.getBlock() == Blocks.WATER ||
                                     currentState.getBlock() == Blocks.LAVA ||
@@ -161,25 +163,25 @@ public class WorldHacker {
                     }
                 }
 
-                // ==========================================
                 // ФАЗА 2: УДАЛЕНИЕ / ОБНУЛЕНИЕ (BAN)
-                // ==========================================
                 if (!nothingToBan) {
                     LevelChunkSection[] sections = chunk.getSections();
                     for (int i = 0; i < sections.length; i++) {
+
+                        // KILL SWITCH #2: Периодическая проверка между секциями для экономии CPU
+                        if (TheGameOfLifeMod.currentRuleVersion != taskVersion) return null;
+
                         LevelChunkSection section = sections[i];
                         if (section == null || section.hasOnlyAir()) continue;
 
-                        // ОПТИМИЗАЦИЯ ПАЛИТРЫ: Мгновенная проверка куба 16x16x16 через фильтры
                         boolean hasBannedTargets = section.getStates().maybeHas(state ->
                                 TheGameOfLifeMod.BANNED_BLOCKS.contains(state.getBlock()) ||
                                         StateFilter.check(TheGameOfLifeMod.BANNED_BREAK_FILTERS, state) ||
                                         StateFilter.check(TheGameOfLifeMod.BANNED_RESET_FILTERS, state)
                         );
 
-                        if (!hasBannedTargets) continue; // Пропускаем секции, где нет наших целей
+                        if (!hasBannedTargets) continue;
 
-                        // Универсальная математика высоты, чтобы избежать ошибок с bottomBlockY()
                         int startY = -64 + (i * 16);
                         int startX = chunk.getPos().getMinBlockX();
                         int startZ = chunk.getPos().getMinBlockZ();
@@ -192,11 +194,11 @@ public class WorldHacker {
 
                                     BlockState currentState = chunk.getBlockState(mPos);
 
-                                    // РАЗВИЛКА ЛОГИКИ: Воздух или Дефолт?
+                                    // ЛОГИКА SNAPSHOT: Сохраняем оригинал ДО применения изменений
                                     if (TheGameOfLifeMod.BANNED_BLOCKS.contains(currentState.getBlock()) ||
                                             StateFilter.check(TheGameOfLifeMod.BANNED_BREAK_FILTERS, currentState)) {
 
-                                        // Уничтожаем (в Воздух)
+                                        data.blocksToBackup.put(mPos.asLong(), currentState); // Снимок
                                         data.blocksToModify.put(mPos.asLong(), air);
 
                                     } else if (WorldHacker.StateFilter.check(TheGameOfLifeMod.BANNED_RESET_FILTERS, currentState)) {
@@ -204,10 +206,10 @@ public class WorldHacker {
 
                                         for (WorldHacker.StateFilter f : TheGameOfLifeMod.BANNED_RESET_FILTERS) {
                                             if (f.matches(currentState)) {
-                                                // Вызываем вспомогательный метод для безопасной типизации
                                                 resetState = applyReset(resetState, f.property());
                                             }
                                         }
+                                        data.blocksToBackup.put(mPos.asLong(), currentState); // Снимок
                                         data.blocksToModify.put(mPos.asLong(), resetState);
                                     } else {
                                         continue;
@@ -229,7 +231,11 @@ public class WorldHacker {
                 return null;
             }
         }).thenAcceptAsync(data -> {
-            if (data == null) return;
+            // Очищаем статус задачи в любом случае
+            PENDING_TASKS.remove(chunkPosLong);
+
+            // KILL SWITCH #3 (Финальный): Если эпоха сменилась ИЛИ данных нет — откат транзакции
+            if (data == null || TheGameOfLifeMod.currentRuleVersion != taskVersion) return;
 
             try {
                 BlockPos.MutableBlockPos syncPos = new BlockPos.MutableBlockPos();
@@ -240,25 +246,32 @@ public class WorldHacker {
                 for (var entry : data.blocksToRestore.long2ObjectEntrySet()) {
                     long posLong = entry.getLongKey();
                     chunk.setBlockState(syncPos.set(posLong), entry.getValue());
-                    chunkMemory.remove(posLong); // Удаляем из архива после успешного возвращения в мир
+                    chunkMemory.remove(posLong);
                 }
 
-                // 2. ПРИМЕНЯЕМ УДАЛЕНИЕ / ОБНУЛЕНИЕ
+                // 2. ПРИМЕНЯЕМ УДАЛЕНИЕ / ОБНУЛЕНИЕ С БЭКАПОМ
                 for (var entry : data.blocksToModify.long2ObjectEntrySet()) {
                     long posLong = entry.getLongKey();
                     BlockState newState = entry.getValue();
                     syncPos.set(posLong);
 
-                    // Сохраняем оригинал в Архив ПЕРЕД изменением
-                    chunkMemory.putIfAbsent(posLong, chunk.getBlockState(syncPos));
+                    // Достаем снимок состояния, который мы сделали ПЕРЕД изменением, и кладем в архив
+                    BlockState originalState = data.blocksToBackup.get(posLong);
+                    if (originalState != null) {
+                        chunkMemory.putIfAbsent(posLong, originalState);
+                    }
 
-                    // Ставим новое состояние (Воздух или Дефолт)
+                    // Применяем новое состояние в мир
                     chunk.setBlockState(syncPos, newState);
                 }
 
                 chunk.markUnsaved();
                 broadcastUpdate(level, chunk);
                 TheGameOfLifeMod.LIGHT_CALC_QUEUE.add(data);
+
+                // === АТОМАРНЫЙ КОММИТ ===
+                // Отмечаем чанк как выполненный ТОЛЬКО здесь, когда всё успешно завершилось
+                TheGameOfLifeMod.CHUNK_VERSIONS.put(chunkPosLong, taskVersion);
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -280,7 +293,6 @@ public class WorldHacker {
         }
     }
 
-    // Вспомогательный метод для обхода ограничений дженериков Java
     private static <T extends Comparable<T>> BlockState applyReset(BlockState state, Property<T> prop) {
         return state.setValue(prop, state.getBlock().defaultBlockState().getValue(prop));
     }
@@ -297,7 +309,6 @@ public class WorldHacker {
     }
 
     public static void processLightQueues(MinecraftServer server) {
-        // Рассылка готового света
         int sent = 0;
         while (!TheGameOfLifeMod.LIGHT_PACKET_QUEUE.isEmpty() && sent < 2) {
             ChunkUpdateData d = TheGameOfLifeMod.LIGHT_PACKET_QUEUE.poll();
@@ -305,7 +316,6 @@ public class WorldHacker {
             sent++;
         }
 
-        // Просчет столбов света
         int cols = 0;
         while (!TheGameOfLifeMod.LIGHT_CALC_QUEUE.isEmpty() && cols < 1000) {
             ChunkUpdateData d = TheGameOfLifeMod.LIGHT_CALC_QUEUE.peek();
@@ -320,11 +330,11 @@ public class WorldHacker {
     public static class ChunkUpdateData {
         public final LevelChunk chunk;
 
-        // НОВОЕ: Что на что меняем в Фазе 2 (Удаление/Обнуление)
         public final Long2ObjectOpenHashMap<BlockState> blocksToModify = new Long2ObjectOpenHashMap<>();
-
-        // Что возвращаем из небытия в Фазе 1 (Разбан)
         public final Long2ObjectOpenHashMap<BlockState> blocksToRestore = new Long2ObjectOpenHashMap<>();
+
+        // НОВОЕ: Временное хранилище снимков блоков до их изменения
+        public final Long2ObjectOpenHashMap<BlockState> blocksToBackup = new Long2ObjectOpenHashMap<>();
 
         public final int[] highestY = new int[256];
         public final int[] lowestY = new int[256];
@@ -339,7 +349,6 @@ public class WorldHacker {
         }
 
         public boolean updateLight(int limit) {
-            // ... (оставляем старый код updateLight без изменений) ...
             LevelLightEngine le = chunk.getLevel().getLightEngine();
             BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
             int startX = chunk.getPos().getMinBlockX();
