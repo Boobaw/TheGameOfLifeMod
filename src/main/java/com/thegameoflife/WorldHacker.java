@@ -1,8 +1,6 @@
 package com.thegameoflife;
 
-import com.thegameoflife.TheGameOfLifeMod;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.longs.LongArrayList;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.server.MinecraftServer;
@@ -22,11 +20,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class WorldHacker {
-    // УМНАЯ ОЧЕРЕДЬ: хранит задачи, которые сейчас в процессе, чтобы не спамить потоки
+    // УМНАЯ ОЧЕРЕДЬ: защищает от дублирования задач для одного чанка
     private static final ConcurrentHashMap<Long, Integer> PENDING_TASKS = new ConcurrentHashMap<>();
 
     public static void tickRadar(MinecraftServer server) {
-        int targetVersion = TheGameOfLifeMod.currentRuleVersion;
+        final int targetVersion = TheGameOfLifeMod.currentRuleVersion;
 
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             ServerLevel level = (ServerLevel) player.level();
@@ -37,19 +35,19 @@ public class WorldHacker {
                 for (int z = -viewDist; z <= viewDist; z++) {
                     long posLong = ChunkPos.asLong(pPos.x + x, pPos.z + z);
 
-                    // 1. Проверяем, не обновлен ли уже чанк, И не находится ли он прямо сейчас в обработке
-                    if (TheGameOfLifeMod.CHUNK_VERSIONS.getOrDefault(posLong, 0) < targetVersion &&
-                            PENDING_TASKS.getOrDefault(posLong, 0) < targetVersion) {
+                    // 1. Фильтр: пропускаем, если чанк уже обновлен ИЛИ прямо сейчас обрабатывается этой версией
+                    if (TheGameOfLifeMod.CHUNK_VERSIONS.getOrDefault(posLong, 0) >= targetVersion ||
+                            PENDING_TASKS.getOrDefault(posLong, 0) >= targetVersion) {
+                        continue;
+                    }
 
-                        LevelChunk chunk = level.getChunkSource().getChunkNow(pPos.x + x, pPos.z + z);
+                    // 2. Берем чанк без генерации (избегаем лагов)
+                    LevelChunk chunk = level.getChunkSource().getChunkNow(pPos.x + x, pPos.z + z);
 
-                        if (chunk != null) {
-                            // 2. Бронируем задачу в очереди (но НЕ помечаем как выполненную!)
-                            PENDING_TASKS.put(posLong, targetVersion);
-
-                            // Передаем targetVersion, чтобы поток знал свою "Эпоху"
-                            processChunkRulesAsync(level, chunk, targetVersion);
-                        }
+                    if (chunk != null) {
+                        // 3. Бронируем чанк и отправляем в конвейер
+                        PENDING_TASKS.put(posLong, targetVersion);
+                        processChunkRulesAsync(level, chunk, targetVersion);
                     }
                 }
             }
@@ -57,9 +55,7 @@ public class WorldHacker {
     }
 
     // =========================================
-    // МЕТОДЫ УПРАВЛЕНИЯ ЭПОХАМИ
-    // При каждом вызове currentRuleVersion увеличивается,
-    // что автоматически "убивает" все старые асинхронные задачи.
+    // ЭПОХИ (Атомарные инкременты)
     // =========================================
     public static void banBlocksAndSnap(Set<Block> targets) {
         TheGameOfLifeMod.UNBANNED_BLOCKS.removeAll(targets);
@@ -103,35 +99,41 @@ public class WorldHacker {
         System.out.println("!!! РАЗБАН ФИЛЬТРОВ (ОБНУЛЕНИЕ): Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
-
+    // =========================================
+    // АСИНХРОННЫЙ КОНВЕЙЕР (Fast Math Version)
+    // =========================================
     public static void processChunkRulesAsync(ServerLevel level, LevelChunk chunk, int taskVersion) {
-        boolean nothingToBan = TheGameOfLifeMod.BANNED_BLOCKS.isEmpty() &&
+        final boolean nothingToBan = TheGameOfLifeMod.BANNED_BLOCKS.isEmpty() &&
                 TheGameOfLifeMod.BANNED_BREAK_FILTERS.isEmpty() &&
                 TheGameOfLifeMod.BANNED_RESET_FILTERS.isEmpty();
 
-        boolean nothingToUnban = TheGameOfLifeMod.UNBANNED_BLOCKS.isEmpty() &&
+        final boolean nothingToUnban = TheGameOfLifeMod.UNBANNED_BLOCKS.isEmpty() &&
                 TheGameOfLifeMod.UNBANNED_BREAK_FILTERS.isEmpty() &&
                 TheGameOfLifeMod.UNBANNED_RESET_FILTERS.isEmpty();
 
+        final long chunkPosLong = chunk.getPos().toLong();
+
         if (nothingToBan && nothingToUnban) {
-            PENDING_TASKS.remove(chunk.getPos().toLong());
+            PENDING_TASKS.remove(chunkPosLong);
+            TheGameOfLifeMod.CHUNK_VERSIONS.put(chunkPosLong, taskVersion);
             return;
         }
 
-        BlockState air = Blocks.AIR.defaultBlockState();
-        long chunkPosLong = chunk.getPos().toLong();
-
+        // ВАЖНО: Без level.getServer() сканирование летит на ForkJoinPool (свободные ядра процессора)
         CompletableFuture.supplyAsync(() -> {
             try {
-                // KILL SWITCH #1: Проверка на старте потока
+                // Kill Switch #1
                 if (TheGameOfLifeMod.currentRuleVersion != taskVersion) return null;
 
                 ChunkUpdateData data = new ChunkUpdateData(chunk);
                 BlockPos.MutableBlockPos mPos = new BlockPos.MutableBlockPos();
+                BlockState air = Blocks.AIR.defaultBlockState();
 
-                // ФАЗА 1: ВОССТАНОВЛЕНИЕ ИЗ АРХИВА (UNBAN)
+                final int startX = chunk.getPos().getMinBlockX();
+                final int startZ = chunk.getPos().getMinBlockZ();
+
+                // ФАЗА 1: ВОССТАНОВЛЕНИЕ (UNBAN)
                 ConcurrentHashMap<Long, BlockState> chunkMemory = TheGameOfLifeMod.CHUNK_MEMORY.get(chunkPosLong);
-
                 if (chunkMemory != null && !chunkMemory.isEmpty() && !nothingToUnban) {
                     for (var entry : chunkMemory.entrySet()) {
                         long blockPosLong = entry.getKey();
@@ -142,22 +144,10 @@ public class WorldHacker {
                                 StateFilter.check(TheGameOfLifeMod.UNBANNED_RESET_FILTERS, savedState);
 
                         if (isUnbanned) {
-                            mPos.set(blockPosLong);
-                            BlockState currentState = chunk.getBlockState(mPos);
-
-                            boolean canOverwrite = currentState.isAir() ||
-                                    currentState.getBlock() == Blocks.WATER ||
-                                    currentState.getBlock() == Blocks.LAVA ||
-                                    currentState.getBlock() == savedState.getBlock();
-
-                            if (canOverwrite) {
+                            BlockState currentState = chunk.getBlockState(mPos.set(blockPosLong));
+                            if (currentState.isAir() || currentState.getBlock() == Blocks.WATER || currentState.getBlock() == Blocks.LAVA || currentState.getBlock() == savedState.getBlock()) {
                                 data.blocksToRestore.put(blockPosLong, savedState);
-
-                                int lx = mPos.getX() - chunk.getPos().getMinBlockX();
-                                int lz = mPos.getZ() - chunk.getPos().getMinBlockZ();
-                                int idx = lx + lz * 16;
-                                if (mPos.getY() > data.highestY[idx]) data.highestY[idx] = mPos.getY();
-                                if (mPos.getY() < data.lowestY[idx]) data.lowestY[idx] = mPos.getY();
+                                data.recordHeight(mPos.getX() - startX, mPos.getY(), mPos.getZ() - startZ);
                             }
                         }
                     }
@@ -167,57 +157,51 @@ public class WorldHacker {
                 if (!nothingToBan) {
                     LevelChunkSection[] sections = chunk.getSections();
                     for (int i = 0; i < sections.length; i++) {
-
-                        // KILL SWITCH #2: Периодическая проверка между секциями для экономии CPU
+                        // Kill Switch #2 (Проверка между секциями)
                         if (TheGameOfLifeMod.currentRuleVersion != taskVersion) return null;
 
                         LevelChunkSection section = sections[i];
                         if (section == null || section.hasOnlyAir()) continue;
 
-                        boolean hasBannedTargets = section.getStates().maybeHas(state ->
-                                TheGameOfLifeMod.BANNED_BLOCKS.contains(state.getBlock()) ||
-                                        StateFilter.check(TheGameOfLifeMod.BANNED_BREAK_FILTERS, state) ||
-                                        StateFilter.check(TheGameOfLifeMod.BANNED_RESET_FILTERS, state)
-                        );
+                        // БЫСТРЫЙ ФИЛЬТР: Проверяем палитру, чтобы мгновенно скипать пустые для нас секции
+                        boolean hasTargets = section.getStates().maybeHas(state -> {
+                            if (state.isAir()) return false;
+                            return TheGameOfLifeMod.BANNED_BLOCKS.contains(state.getBlock()) ||
+                                    StateFilter.check(TheGameOfLifeMod.BANNED_BREAK_FILTERS, state) ||
+                                    StateFilter.check(TheGameOfLifeMod.BANNED_RESET_FILTERS, state);
+                        });
 
-                        if (!hasBannedTargets) continue;
+                        if (!hasTargets) continue;
 
-                        int startY = -64 + (i * 16);
-                        int startX = chunk.getPos().getMinBlockX();
-                        int startZ = chunk.getPos().getMinBlockZ();
+                        final int startY = -64 + (i << 4); // i * 16 через побитовый сдвиг
 
-                        for (int x = 0; x < 16; x++) {
+                        for (int y = 0; y < 16; y++) {
+                            int realY = startY + y;
                             for (int z = 0; z < 16; z++) {
-                                for (int y = 0; y < 16; y++) {
-                                    int realY = startY + y;
-                                    mPos.set(startX + x, realY, startZ + z);
+                                int realZ = startZ + z;
+                                for (int x = 0; x < 16; x++) {
+                                    BlockState currentState = section.getBlockState(x, y, z);
 
-                                    BlockState currentState = chunk.getBlockState(mPos);
-
-                                    // ЛОГИКА SNAPSHOT: Сохраняем оригинал ДО применения изменений
                                     if (TheGameOfLifeMod.BANNED_BLOCKS.contains(currentState.getBlock()) ||
                                             StateFilter.check(TheGameOfLifeMod.BANNED_BREAK_FILTERS, currentState)) {
 
-                                        data.blocksToBackup.put(mPos.asLong(), currentState); // Снимок
-                                        data.blocksToModify.put(mPos.asLong(), air);
+                                        long p = mPos.set(startX + x, realY, realZ).asLong();
+                                        data.blocksToBackup.put(p, currentState); // SNAPSHOT
+                                        data.blocksToModify.put(p, air);
+                                        data.recordHeight(x, realY, z);
 
                                     } else if (WorldHacker.StateFilter.check(TheGameOfLifeMod.BANNED_RESET_FILTERS, currentState)) {
                                         BlockState resetState = currentState;
-
                                         for (WorldHacker.StateFilter f : TheGameOfLifeMod.BANNED_RESET_FILTERS) {
                                             if (f.matches(currentState)) {
                                                 resetState = applyReset(resetState, f.property());
                                             }
                                         }
-                                        data.blocksToBackup.put(mPos.asLong(), currentState); // Снимок
-                                        data.blocksToModify.put(mPos.asLong(), resetState);
-                                    } else {
-                                        continue;
+                                        long p = mPos.set(startX + x, realY, realZ).asLong();
+                                        data.blocksToBackup.put(p, currentState); // SNAPSHOT
+                                        data.blocksToModify.put(p, resetState);
+                                        data.recordHeight(x, realY, z);
                                     }
-
-                                    int idx = x + z * 16;
-                                    if (realY > data.highestY[idx]) data.highestY[idx] = realY;
-                                    if (realY < data.lowestY[idx]) data.lowestY[idx] = realY;
                                 }
                             }
                         }
@@ -225,57 +209,66 @@ public class WorldHacker {
                 }
 
                 return (data.blocksToModify.isEmpty() && data.blocksToRestore.isEmpty()) ? null : data;
-
             } catch (Exception e) {
-                e.printStackTrace();
                 return null;
             }
-        }).thenAcceptAsync(data -> {
-            // Очищаем статус задачи в любом случае
-            PENDING_TASKS.remove(chunkPosLong);
 
-            // KILL SWITCH #3 (Финальный): Если эпоха сменилась ИЛИ данных нет — откат транзакции
+            // ВАЖНО: Применение происходит строго в главном потоке сервера для избежания десинков
+        }).thenAcceptAsync(data -> {
+            PENDING_TASKS.remove(chunkPosLong); // Снимаем блокировку
+
+            // Kill Switch #3 (Финальная проверка перед коммитом)
             if (data == null || TheGameOfLifeMod.currentRuleVersion != taskVersion) return;
 
-            try {
-                BlockPos.MutableBlockPos syncPos = new BlockPos.MutableBlockPos();
-                ConcurrentHashMap<Long, BlockState> chunkMemory =
-                        TheGameOfLifeMod.CHUNK_MEMORY.computeIfAbsent(chunkPosLong, k -> new ConcurrentHashMap<>());
+            BlockPos.MutableBlockPos syncPos = new BlockPos.MutableBlockPos();
+            ConcurrentHashMap<Long, BlockState> chunkMemory =
+                    TheGameOfLifeMod.CHUNK_MEMORY.computeIfAbsent(chunkPosLong, k -> new ConcurrentHashMap<>());
 
-                // 1. ПРИМЕНЯЕМ ВОССТАНОВЛЕНИЕ
-                for (var entry : data.blocksToRestore.long2ObjectEntrySet()) {
-                    long posLong = entry.getLongKey();
-                    chunk.setBlockState(syncPos.set(posLong), entry.getValue());
-                    chunkMemory.remove(posLong);
-                }
+            LevelChunkSection[] sections = chunk.getSections();
+            int minBuildHeight = -64; // Дно мира
 
-                // 2. ПРИМЕНЯЕМ УДАЛЕНИЕ / ОБНУЛЕНИЕ С БЭКАПОМ
-                for (var entry : data.blocksToModify.long2ObjectEntrySet()) {
-                    long posLong = entry.getLongKey();
-                    BlockState newState = entry.getValue();
-                    syncPos.set(posLong);
+            // =========================================================
+            // РЕЖИМ НИНДЗЯ: Прямая запись в секции (БЕЗ ОБНОВЛЕНИЯ СОСЕДЕЙ)
+            // =========================================================
+            data.blocksToRestore.forEach((pos, state) -> {
+                syncPos.set(pos);
+                int y = syncPos.getY();
+                int secIdx = (y - minBuildHeight) >> 4;
 
-                    // Достаем снимок состояния, который мы сделали ПЕРЕД изменением, и кладем в архив
-                    BlockState originalState = data.blocksToBackup.get(posLong);
-                    if (originalState != null) {
-                        chunkMemory.putIfAbsent(posLong, originalState);
+                if (secIdx >= 0 && secIdx < sections.length) {
+                    LevelChunkSection section = sections[secIdx];
+                    if (section != null) {
+                        // Пишем напрямую в память. Никакой физики, никаких onRemove и onPlace!
+                        section.setBlockState(syncPos.getX() & 15, y & 15, syncPos.getZ() & 15, state);
                     }
+                }
+                chunkMemory.remove(pos);
+            });
 
-                    // Применяем новое состояние в мир
-                    chunk.setBlockState(syncPos, newState);
+            data.blocksToModify.forEach((pos, newState) -> {
+                syncPos.set(pos);
+                int y = syncPos.getY();
+                int secIdx = (y - minBuildHeight) >> 4;
+
+                if (secIdx >= 0 && secIdx < sections.length) {
+                    LevelChunkSection section = sections[secIdx];
+                    if (section != null) {
+                        // Бесшумное удаление. Вода за границей чанка ничего не узнает.
+                        section.setBlockState(syncPos.getX() & 15, y & 15, syncPos.getZ() & 15, newState);
+                    }
                 }
 
-                chunk.markUnsaved();
-                broadcastUpdate(level, chunk);
-                TheGameOfLifeMod.LIGHT_CALC_QUEUE.add(data);
+                BlockState originalState = data.blocksToBackup.get(pos);
+                if (originalState != null) chunkMemory.putIfAbsent(pos, originalState);
+            });
 
-                // === АТОМАРНЫЙ КОММИТ ===
-                // Отмечаем чанк как выполненный ТОЛЬКО здесь, когда всё успешно завершилось
-                TheGameOfLifeMod.CHUNK_VERSIONS.put(chunkPosLong, taskVersion);
+            chunk.markUnsaved();
+            broadcastUpdate(level, chunk);
+            TheGameOfLifeMod.LIGHT_CALC_QUEUE.add(data);
 
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            // Завершение транзакции
+            TheGameOfLifeMod.CHUNK_VERSIONS.put(chunkPosLong, taskVersion);
+
         }, level.getServer());
     }
 
@@ -301,41 +294,40 @@ public class WorldHacker {
         var packet = new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null);
         int dist = level.getServer().getPlayerList().getViewDistance();
         for (ServerPlayer p : level.players()) {
-            if (Math.abs(p.chunkPosition().x - chunk.getPos().x) <= dist &&
-                    Math.abs(p.chunkPosition().z - chunk.getPos().z) <= dist) {
+            int dx = p.chunkPosition().x - chunk.getPos().x;
+            int dz = p.chunkPosition().z - chunk.getPos().z;
+            if ((dx >= -dist && dx <= dist) && (dz >= -dist && dz <= dist)) {
                 p.connection.send(packet);
             }
         }
     }
 
     public static void processLightQueues(MinecraftServer server) {
+        // OVERDRIVE: Увеличили рассылку готовых пакетов в 5 раз
         int sent = 0;
-        while (!TheGameOfLifeMod.LIGHT_PACKET_QUEUE.isEmpty() && sent < 2) {
+        while (!TheGameOfLifeMod.LIGHT_PACKET_QUEUE.isEmpty() && sent < 10) {
             ChunkUpdateData d = TheGameOfLifeMod.LIGHT_PACKET_QUEUE.poll();
             if (d != null) broadcastUpdate((ServerLevel) d.chunk.getLevel(), d.chunk);
             sent++;
         }
 
+        // OVERDRIVE: Увеличили просчет световых столбов в 15 раз
         int cols = 0;
-        while (!TheGameOfLifeMod.LIGHT_CALC_QUEUE.isEmpty() && cols < 1000) {
+        while (!TheGameOfLifeMod.LIGHT_CALC_QUEUE.isEmpty() && cols < 15000) {
             ChunkUpdateData d = TheGameOfLifeMod.LIGHT_CALC_QUEUE.peek();
-            if (d != null && d.updateLight(1000 - cols)) {
+            if (d != null && d.updateLight(15000 - cols)) {
                 TheGameOfLifeMod.LIGHT_CALC_QUEUE.poll();
                 TheGameOfLifeMod.LIGHT_PACKET_QUEUE.add(d);
             }
-            cols += 1000;
+            cols += 5000;
         }
     }
 
     public static class ChunkUpdateData {
         public final LevelChunk chunk;
-
         public final Long2ObjectOpenHashMap<BlockState> blocksToModify = new Long2ObjectOpenHashMap<>();
         public final Long2ObjectOpenHashMap<BlockState> blocksToRestore = new Long2ObjectOpenHashMap<>();
-
-        // НОВОЕ: Временное хранилище снимков блоков до их изменения
         public final Long2ObjectOpenHashMap<BlockState> blocksToBackup = new Long2ObjectOpenHashMap<>();
-
         public final int[] highestY = new int[256];
         public final int[] lowestY = new int[256];
         private int colIdx = 0;
@@ -348,6 +340,12 @@ public class WorldHacker {
             }
         }
 
+        public void recordHeight(int lx, int y, int lz) {
+            int idx = lx | (lz << 4);
+            if (y > highestY[idx]) highestY[idx] = y;
+            if (y < lowestY[idx]) lowestY[idx] = y;
+        }
+
         public boolean updateLight(int limit) {
             LevelLightEngine le = chunk.getLevel().getLightEngine();
             BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
@@ -357,7 +355,7 @@ public class WorldHacker {
             while (colIdx < 256 && done < limit) {
                 if (highestY[colIdx] != Integer.MIN_VALUE) {
                     for (int y = lowestY[colIdx]; y <= highestY[colIdx]; y++) {
-                        le.checkBlock(p.set(startX + (colIdx % 16), y, startZ + (colIdx / 16)));
+                        le.checkBlock(p.set(startX + (colIdx & 15), y, startZ + (colIdx >> 4)));
                     }
                 }
                 colIdx++;
@@ -365,5 +363,9 @@ public class WorldHacker {
             }
             return colIdx >= 256;
         }
+    }
+
+    public static boolean isChunkFrozen(long chunkPosLong) {
+        return PENDING_TASKS.containsKey(chunkPosLong);
     }
 }

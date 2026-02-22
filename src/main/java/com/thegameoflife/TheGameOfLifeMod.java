@@ -55,6 +55,7 @@ public class TheGameOfLifeMod implements ModInitializer {
 		COMMAND_MAP.put("unstone", () -> unbanBlocksAndSnap(Set.of(Blocks.STONE)));
 		COMMAND_MAP.put("water", () -> {
 			banBlocksAndSnap(Set.of(Blocks.WATER));
+			banBlocksAndSnap(Set.of(Blocks.BUBBLE_COLUMN));
 			banBlocksAndSnap(Set.of(Blocks.KELP));
 			banBlocksAndSnap(Set.of(Blocks.KELP_PLANT));
 			banBlocksAndSnap(Set.of(Blocks.SEAGRASS));
@@ -63,6 +64,7 @@ public class TheGameOfLifeMod implements ModInitializer {
 		});
 		COMMAND_MAP.put("unwater", () -> {
 			unbanBlocksAndSnap(Set.of(Blocks.WATER));
+			unbanBlocksAndSnap(Set.of(Blocks.BUBBLE_COLUMN));
 			unbanBlocksAndSnap(Set.of(Blocks.KELP));
 			unbanBlocksAndSnap(Set.of(Blocks.KELP_PLANT));
 			unbanBlocksAndSnap(Set.of(Blocks.SEAGRASS));
