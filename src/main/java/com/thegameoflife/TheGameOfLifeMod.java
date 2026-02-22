@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
@@ -34,8 +35,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
-import static com.thegameoflife.WorldHacker.banAndSnap;
-import static com.thegameoflife.WorldHacker.unbanAndSnap;
+import static com.thegameoflife.WorldHacker.*;
 
 
 public class TheGameOfLifeMod implements ModInitializer {
@@ -49,25 +49,44 @@ public class TheGameOfLifeMod implements ModInitializer {
 	static {
 		COMMAND_MAP.put("stop", () -> runCommand("tick freeze"));
 		COMMAND_MAP.put("start", () -> runCommand("tick unfreeze"));
-		COMMAND_MAP.put("dirt", () -> banAndSnap(Set.of(Blocks.DIRT)));
-		COMMAND_MAP.put("undirt", () -> unbanAndSnap(Set.of(Blocks.DIRT)));
-		COMMAND_MAP.put("stone", () -> banAndSnap(Set.of(Blocks.STONE)));
-		COMMAND_MAP.put("unstone", () -> unbanAndSnap(Set.of(Blocks.STONE)));
+		COMMAND_MAP.put("dirt", () -> banBlocksAndSnap(Set.of(Blocks.DIRT)));
+		COMMAND_MAP.put("undirt", () -> unbanBlocksAndSnap(Set.of(Blocks.DIRT)));
+		COMMAND_MAP.put("stone", () -> banBlocksAndSnap(Set.of(Blocks.STONE)));
+		COMMAND_MAP.put("unstone", () -> unbanBlocksAndSnap(Set.of(Blocks.STONE)));
+		COMMAND_MAP.put("water", () -> {
+			banBlocksAndSnap(Set.of(Blocks.WATER));
+			banBlocksAndSnap(Set.of(Blocks.KELP));
+			banBlocksAndSnap(Set.of(Blocks.KELP_PLANT));
+			banBlocksAndSnap(Set.of(Blocks.SEAGRASS));
+			banBlocksAndSnap(Set.of(Blocks.TALL_SEAGRASS));
+			WorldHacker.banResetFiltersAndSnap(Set.of(new WorldHacker.StateFilter(null, BlockStateProperties.WATERLOGGED, true)));
+		});
+		COMMAND_MAP.put("unwater", () -> {
+			unbanBlocksAndSnap(Set.of(Blocks.WATER));
+			unbanBlocksAndSnap(Set.of(Blocks.KELP));
+			unbanBlocksAndSnap(Set.of(Blocks.KELP_PLANT));
+			unbanBlocksAndSnap(Set.of(Blocks.SEAGRASS));
+			unbanBlocksAndSnap(Set.of(Blocks.TALL_SEAGRASS));
+			WorldHacker.unbanResetFiltersAndSnap(Set.of(new WorldHacker.StateFilter(null, BlockStateProperties.WATERLOGGED, true)));
+		});
 	}
 
 
-	// Текущие списки правил
+	// 1. Полное уничтожение блока (Блок -> Воздух)
 	public static final Set<Block> BANNED_BLOCKS = ConcurrentHashMap.newKeySet();
-	public static final Set<Block> UNBANNED_BLOCKS = ConcurrentHashMap.newKeySet(); // НОВОЕ: Буфер для возврата
+	public static final Set<Block> UNBANNED_BLOCKS = ConcurrentHashMap.newKeySet();
 
-	// Эпоха правил
+	// Списки для ПОЛНОГО УНИЧТОЖЕНИЯ (превращения в Воздух)
+	public static final Set<WorldHacker.StateFilter> BANNED_BREAK_FILTERS = ConcurrentHashMap.newKeySet();
+	public static final Set<WorldHacker.StateFilter> UNBANNED_BREAK_FILTERS = ConcurrentHashMap.newKeySet();
+
+	// Списки для ОБНУЛЕНИЯ (превращения в дефолтный сухой/потушенный блок)
+	public static final Set<WorldHacker.StateFilter> BANNED_RESET_FILTERS = ConcurrentHashMap.newKeySet();
+	public static final Set<WorldHacker.StateFilter> UNBANNED_RESET_FILTERS = ConcurrentHashMap.newKeySet();
+
+	// Эпоха и Память чанков остаются без изменений
 	public static int currentRuleVersion = 0;
-
-	// Карта версий чанков: [ChunkPos -> Версия]
 	public static final ConcurrentHashMap<Long, Integer> CHUNK_VERSIONS = new ConcurrentHashMap<>();
-
-	// НОВОЕ: Глобальный Архив Памяти
-	// Формат: [Координата Чанка -> [Координата Блока -> Состояние Блока]]
 	public static final ConcurrentHashMap<Long, ConcurrentHashMap<Long, BlockState>> CHUNK_MEMORY = new ConcurrentHashMap<>();
 
 	// Очереди для плавного света
