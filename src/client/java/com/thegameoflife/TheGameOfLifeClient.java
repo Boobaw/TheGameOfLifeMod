@@ -19,7 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-public class TheGameOfLIfeClient implements ClientModInitializer {
+public class TheGameOfLifeClient implements ClientModInitializer {
 
 	private static final AudioRecorderMod recorder = new AudioRecorderMod();
 	private static ChatLogger logger;
