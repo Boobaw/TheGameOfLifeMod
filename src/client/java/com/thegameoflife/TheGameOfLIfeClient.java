@@ -23,8 +23,6 @@ public class TheGameOfLIfeClient implements ClientModInitializer {
 	private static volatile boolean running = false;
 	private static Thread sttThread;
 
-	private static long nextHud = 0;
-
 	@Override
 	public void onInitializeClient() {
 		logger = new ChatLogger(new File("thegameoflife/chat.log"));
@@ -65,35 +63,13 @@ public class TheGameOfLIfeClient implements ClientModInitializer {
 				if (client.player != null) {
 					client.player.displayClientMessage(
 							Component.literal("Voice: " + (running ? "ON" : "OFF")), false);
-
-					if (running) {
-						client.player.displayClientMessage(
-								Component.literal("Mic: " + recorder.getSelectedMixerName()), false);
-					}
 				}
 
 				if (running) startVoiceLoop();
 			}
-
-			showMicHud();
 		});
 
 		logger.log("[Client] init done");
-	}
-
-	private static void showMicHud() {
-		Minecraft mc = Minecraft.getInstance();
-		long now = System.currentTimeMillis();
-		if (now < nextHud) return;
-		nextHud = now + 1000;
-
-		if (mc.player != null) {
-			mc.player.displayClientMessage(
-					Component.literal("Mic: " + recorder.getSelectedMixerName()
-							+ " | Voice: " + (running ? "ON" : "OFF")),
-					true
-			);
-		}
 	}
 
 	private static void startVoiceLoop() {
@@ -109,7 +85,7 @@ public class TheGameOfLIfeClient implements ClientModInitializer {
 			logger.log("[Client] voice loop started (send to server)");
 
 			while (running) {
-				byte[] data = recorder.record5sBytes();
+				byte[] data = recorder.recordChunkBytes();
 
 				if (data == null) {
 					postChat("[VOICE][ERROR] record failed");

@@ -1,8 +1,15 @@
 package com.thegameoflife;
 
-import javax.sound.sampled.*;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+
+import javax.sound.sampled.AudioFileFormat;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
+import javax.sound.sampled.Mixer;
+import javax.sound.sampled.TargetDataLine;
 
 public class AudioRecorderMod {
 
@@ -31,7 +38,7 @@ public class AudioRecorderMod {
         return AudioSystem.getMixerInfo();
     }
 
-    public byte[] record5sBytes() {
+    public byte[] recordChunkBytes() {
         try {
             AudioFormat[] formats = new AudioFormat[] {
                     new AudioFormat(16000f, 16, 1, true, false),
@@ -52,7 +59,7 @@ public class AudioRecorderMod {
                         Mixer m = AudioSystem.getMixer(selectedMixer);
                         if (m.isLineSupported(info)) {
                             TargetDataLine line = (TargetDataLine) m.getLine(info);
-                            return recordFixed5sBytes(line, format);
+                            return recordFixedChunkBytes(line, format);
                         }
                     } catch (Exception e) {
                         last = e;
@@ -63,30 +70,31 @@ public class AudioRecorderMod {
                 try {
                     if (AudioSystem.isLineSupported(info)) {
                         TargetDataLine line = (TargetDataLine) AudioSystem.getLine(info);
-                        return recordFixed5sBytes(line, format);
+                        return recordFixedChunkBytes(line, format);
                     }
                 } catch (Exception e) {
                     last = e;
                 }
             }
 
-            log("record5s error: " + last);
+            log("recordChunk error: " + last);
             return null;
 
         } catch (Exception e) {
-            log("record5s error: " + e);
+            log("recordChunk error: " + e);
             return null;
         }
     }
 
-    private byte[] recordFixed5sBytes(TargetDataLine line, AudioFormat format) throws Exception {
+    private byte[] recordFixedChunkBytes(TargetDataLine line, AudioFormat format) throws Exception {
         line.open(format);
         line.start();
 
         ByteArrayOutputStream pcmOut = new ByteArrayOutputStream();
         byte[] buffer = new byte[4096];
 
-        long endAt = System.currentTimeMillis() + 5000;
+        // Пишем 4 секунды. Это позволит говорить целыми предложениями, не обрезая слова.
+        long endAt = System.currentTimeMillis() + 4000;
         while (System.currentTimeMillis() < endAt) {
             int read = line.read(buffer, 0, buffer.length);
             if (read > 0) {

@@ -1,31 +1,23 @@
 package com.thegameoflife;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
-import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ChunkMap;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.LevelChunkSection;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import net.fabricmc.api.ModInitializer;
-import net.minecraft.server.level.ServerLevel;
-
-import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.w3c.dom.Text;
-
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 
 
@@ -42,6 +34,12 @@ public class TheGameOfLIfeMod implements ModInitializer {
 	static {
 		COMMAND_MAP.put("stop", () -> runCommand("tick freeze"));
 		COMMAND_MAP.put("start", () -> runCommand("tick unfreeze"));
+		COMMAND_MAP.put("стоп", () -> runCommand("tick freeze"));
+		COMMAND_MAP.put("старт", () -> runCommand("tick unfreeze"));
+		
+		COMMAND_MAP.put("режим русский", () -> VoiceServer.setMode(VoiceServer.VoiceMode.RU));
+		COMMAND_MAP.put("режим английский", () -> VoiceServer.setMode(VoiceServer.VoiceMode.EN));
+		COMMAND_MAP.put("режим авто", () -> VoiceServer.setMode(VoiceServer.VoiceMode.AUTO));
 		//COMMAND_MAP.put("dirt", () -> printLoadedChunks(SERVER.overworld()));
 	}
 
@@ -51,11 +49,12 @@ public class TheGameOfLIfeMod implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		VoiceNetworking.registerPayloads();
+		VoiceServer.registerNetworking(); // Регистрируем прием пакетов СРАЗУ
 
 		// Получаем сервер (официальный lifecycle event)
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> {
 			SERVER = s;
-			VoiceServer.init();
+			VoiceServer.onServerStarted(s); // Запускаем потоки обработки
 		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(s -> VoiceServer.shutdown());
 
@@ -67,8 +66,12 @@ public class TheGameOfLIfeMod implements ModInitializer {
 			LOGGER.info("Player {} said: {}", playerName, text);
 
 			// 🔹 Проверяем совпадения
-			if (COMMAND_MAP.containsKey(text)) {
-				COMMAND_MAP.get(text).run();// действие из словаря
+			String lower = text.toLowerCase(Locale.ROOT);
+			for (Map.Entry<String, Runnable> entry : COMMAND_MAP.entrySet()) {
+				if (lower.contains(entry.getKey())) {
+					entry.getValue().run();
+					break; // Выполняем первую найденную команду и выходим
+				}
 			}
 		});
 	}
@@ -249,4 +252,3 @@ public class TheGameOfLIfeMod implements ModInitializer {
 //			queue.flush();
 //		});
 }
-
