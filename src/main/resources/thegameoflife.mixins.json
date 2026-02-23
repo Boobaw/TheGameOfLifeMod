@@ -4,8 +4,7 @@
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
 		"LevelMixin",
-		"FlowingFluidMixin",
-		"TheGameOfLIfeMixin"
+		"FlowingFluidMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -34,6 +35,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 import static com.thegameoflife.WorldHacker.*;
 
@@ -41,7 +43,7 @@ import static com.thegameoflife.WorldHacker.*;
 public class TheGameOfLifeMod implements ModInitializer {
 	public static final String MOD_ID = "thegameoflife";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-	private static MinecraftServer SERVER;
+	public static MinecraftServer SERVER;
 
 
 	// 1. Полное уничтожение блока (Блок -> Воздух)
@@ -66,47 +68,23 @@ public class TheGameOfLifeMod implements ModInitializer {
 	public static final ConcurrentLinkedQueue<WorldHacker.ChunkUpdateData> LIGHT_PACKET_QUEUE = new ConcurrentLinkedQueue<>();
 
 
-	public static final Map<String, Runnable> COMMAND_MAP = new HashMap<>();
+	public static final Map<String, Consumer<ServerPlayer>> COMMAND_MAP = new HashMap<>();
 
-	// Большой блок действий на слова
 	static {
-		COMMAND_MAP.put("stop", () -> runCommand("tick freeze"));
-		COMMAND_MAP.put("start", () -> runCommand("tick unfreeze"));
-		COMMAND_MAP.put("dirt", () -> {
-			banBlocks(Set.of(Blocks.DIRT));
-			snap();
+		COMMAND_MAP.put("dirt", player -> {
+			WorldHacker.toggle(player, Set.of(Blocks.DIRT, Blocks.GRASS_BLOCK), null);
 		});
-		COMMAND_MAP.put("undirt", () -> {
-			unbanBlocks(Set.of(Blocks.DIRT));
-			snap();
+
+		COMMAND_MAP.put("grass", player -> {
+			WorldHacker.toggle(player, Set.of(Blocks.GRASS_BLOCK), null);
 		});
-		COMMAND_MAP.put("stone", () -> {
-			banBlocks(Set.of(Blocks.STONE));
-			snap();
-		});
-		COMMAND_MAP.put("unstone", () -> {
-			banBlocks(Set.of(Blocks.STONE));
-			snap();
-		});
-		COMMAND_MAP.put("water", () -> {
-			banBlocks(Set.of(Blocks.WATER));
-			banBlocks(Set.of(Blocks.BUBBLE_COLUMN));
-			banBlocks(Set.of(Blocks.KELP));
-			banBlocks(Set.of(Blocks.KELP_PLANT));
-			banBlocks(Set.of(Blocks.SEAGRASS));
-			banBlocks(Set.of(Blocks.TALL_SEAGRASS));
-			banResetFilters(Set.of(new StateFilter(null, BlockStateProperties.WATERLOGGED, true)));
-			snap();
-		});
-		COMMAND_MAP.put("unwater", () -> {
-			unbanBlocks(Set.of(Blocks.WATER));
-			unbanBlocks(Set.of(Blocks.BUBBLE_COLUMN));
-			unbanBlocks(Set.of(Blocks.KELP));
-			unbanBlocks(Set.of(Blocks.KELP_PLANT));
-			unbanBlocks(Set.of(Blocks.SEAGRASS));
-			unbanBlocks(Set.of(Blocks.TALL_SEAGRASS));
-			unbanResetFilters(Set.of(new StateFilter(null, BlockStateProperties.WATERLOGGED, true)));
-			snap();
+
+		// Команда на воду (ищем И блоки, И фильтр WATERLOGGED за один проход!)
+		COMMAND_MAP.put("water", player -> {
+			WorldHacker.toggle(player,
+					Set.of(Blocks.WATER, Blocks.BUBBLE_COLUMN, Blocks.KELP, Blocks.KELP_PLANT, Blocks.SEAGRASS, Blocks.TALL_SEAGRASS),
+					Set.of(new WorldHacker.StateFilter(null, net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED, true))
+			);
 		});
 	}
 
@@ -126,12 +104,13 @@ public class TheGameOfLifeMod implements ModInitializer {
 
 		// Времменный блок для тестов
 		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
-			String text = message.signedContent();             // текст сообщения
-			String playerName = sender.getName().getString();  // имя игрока
+			String text = message.signedContent(); // текст сообщения
+			ServerPlayer serverplayer = sender;          // игрок, который написал
 
 			// 🔹 Проверяем совпадения
 			if (COMMAND_MAP.containsKey(text)) {
-				COMMAND_MAP.get(text).run();// действие из словаря
+				// Достаем функцию из словаря, запускаем её и передаем туда нашего игрока!
+				COMMAND_MAP.get(text).accept(serverplayer);
 			}
 		});
 	}
