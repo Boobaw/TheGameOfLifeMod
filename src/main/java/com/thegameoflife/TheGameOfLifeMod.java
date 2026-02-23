@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -58,6 +59,12 @@ public class TheGameOfLifeMod implements ModInitializer {
 	public static final Set<WorldHacker.StateFilter> BANNED_RESET_FILTERS = ConcurrentHashMap.newKeySet();
 	public static final Set<WorldHacker.StateFilter> UNBANNED_RESET_FILTERS = ConcurrentHashMap.newKeySet();
 
+	public static final Set<EntityType<?>> BANNED_ENTITIES = ConcurrentHashMap.newKeySet();
+	public static final Set<EntityType<?>> UNBANNED_ENTITIES = ConcurrentHashMap.newKeySet();
+
+	public static final Set<net.minecraft.world.item.Item> BANNED_ITEMS = ConcurrentHashMap.newKeySet();
+	public static final Set<net.minecraft.world.item.Item> UNBANNED_ITEMS = ConcurrentHashMap.newKeySet();
+
 	// Эпоха и Память чанков остаются без изменений
 	public static int currentRuleVersion = 0;
 	public static final ConcurrentHashMap<Long, Integer> CHUNK_VERSIONS = new ConcurrentHashMap<>();
@@ -85,6 +92,16 @@ public class TheGameOfLifeMod implements ModInitializer {
 					Set.of(Blocks.WATER, Blocks.BUBBLE_COLUMN, Blocks.KELP, Blocks.KELP_PLANT, Blocks.SEAGRASS, Blocks.TALL_SEAGRASS),
 					Set.of(new WorldHacker.StateFilter(null, net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED, true))
 			);
+		});
+
+		// Команда на Вардена
+		COMMAND_MAP.put("warden", player -> {
+			EntityHacker.toggleEntity(SERVER, EntityType.WARDEN);
+		});
+
+		// Команда на Крипера
+		COMMAND_MAP.put("creeper", player -> {
+			EntityHacker.toggleEntity(SERVER, EntityType.CREEPER);
 		});
 	}
 

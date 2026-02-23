@@ -4,6 +4,7 @@
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
 		"LevelMixin",
+		"ServerLevelMixin",
 		"FlowingFluidMixin"
 	],
 	"injectors": {

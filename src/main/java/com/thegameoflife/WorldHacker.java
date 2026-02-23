@@ -155,7 +155,7 @@ public class WorldHacker {
     // =========================================
     private record ScanResult(Set<Block> foundBlocks, Set<StateFilter> foundFilters) {}
 
-    private static ScanResult scanServer(MinecraftServer server, Set<Block> targetBlocks, Set<StateFilter> targetFilters) {
+    public static ScanResult scanServer(MinecraftServer server, Set<Block> targetBlocks, Set<StateFilter> targetFilters) {
         Set<Block> foundBlocks = new java.util.HashSet<>();
         Set<StateFilter> foundFilters = new java.util.HashSet<>();
 
