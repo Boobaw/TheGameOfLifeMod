@@ -3,7 +3,8 @@
 	"package": "com.thegameoflife.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"LevelChunkMixin",
+		"LevelMixin",
+		"FlowingFluidMixin",
 		"TheGameOfLIfeMixin"
 	],
 	"injectors": {

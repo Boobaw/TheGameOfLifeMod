@@ -45,8 +45,23 @@ public class WorldHacker {
                     LevelChunk chunk = level.getChunkSource().getChunkNow(pPos.x + x, pPos.z + z);
 
                     if (chunk != null) {
-                        // 3. Бронируем чанк и отправляем в конвейер
                         PENDING_TASKS.put(posLong, targetVersion);
+
+                        // ==========================================
+                        // ХАРДКОРНАЯ АМНЕЗИЯ (Убиваем Scheduled Ticks)
+                        // ==========================================
+                        // Создаем коробку размером с весь чанк (от дна мира до неба)
+                        net.minecraft.world.level.levelgen.structure.BoundingBox chunkBox =
+                                new net.minecraft.world.level.levelgen.structure.BoundingBox(
+                                        chunk.getPos().getMinBlockX(), -64, chunk.getPos().getMinBlockZ(),
+                                        chunk.getPos().getMaxBlockX(), 320, chunk.getPos().getMaxBlockZ()
+                                );
+
+                        // Жестко вычищаем из памяти сервера любые запланированные действия для воды и блоков в этом чанке
+                        level.getFluidTicks().clearArea(chunkBox);
+                        level.getBlockTicks().clearArea(chunkBox);
+                        // ==========================================
+
                         processChunkRulesAsync(level, chunk, targetVersion);
                     }
                 }
@@ -57,44 +72,37 @@ public class WorldHacker {
     // =========================================
     // ЭПОХИ (Атомарные инкременты)
     // =========================================
-    public static void banBlocksAndSnap(Set<Block> targets) {
+    public static void banBlocks(Set<Block> targets) {
         TheGameOfLifeMod.UNBANNED_BLOCKS.removeAll(targets);
         TheGameOfLifeMod.BANNED_BLOCKS.addAll(targets);
-        TheGameOfLifeMod.currentRuleVersion++;
-        System.out.println("!!! БАН БЛОКОВ: Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
-    public static void unbanBlocksAndSnap(Set<Block> targets) {
+    public static void unbanBlocks(Set<Block> targets) {
         TheGameOfLifeMod.BANNED_BLOCKS.removeAll(targets);
         TheGameOfLifeMod.UNBANNED_BLOCKS.addAll(targets);
-        TheGameOfLifeMod.currentRuleVersion++;
-        System.out.println("!!! РАЗБАН БЛОКОВ: Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
-    public static void banBreakFiltersAndSnap(Set<StateFilter> targets) {
+    public static void banBreakFilters(Set<StateFilter> targets) {
         TheGameOfLifeMod.UNBANNED_BREAK_FILTERS.removeAll(targets);
         TheGameOfLifeMod.BANNED_BREAK_FILTERS.addAll(targets);
-        TheGameOfLifeMod.currentRuleVersion++;
-        System.out.println("!!! БАН ФИЛЬТРОВ (УНИЧТОЖЕНИЕ): Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
-    public static void unbanBreakFiltersAndSnap(Set<StateFilter> targets) {
+    public static void unbanBreakFilters(Set<StateFilter> targets) {
         TheGameOfLifeMod.BANNED_BREAK_FILTERS.removeAll(targets);
         TheGameOfLifeMod.UNBANNED_BREAK_FILTERS.addAll(targets);
-        TheGameOfLifeMod.currentRuleVersion++;
-        System.out.println("!!! РАЗБАН ФИЛЬТРОВ (УНИЧТОЖЕНИЕ): Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
-    public static void banResetFiltersAndSnap(Set<StateFilter> targets) {
+    public static void banResetFilters(Set<StateFilter> targets) {
         TheGameOfLifeMod.UNBANNED_RESET_FILTERS.removeAll(targets);
         TheGameOfLifeMod.BANNED_RESET_FILTERS.addAll(targets);
-        TheGameOfLifeMod.currentRuleVersion++;
-        System.out.println("!!! БАН ФИЛЬТРОВ (ОБНУЛЕНИЕ): Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
 
-    public static void unbanResetFiltersAndSnap(Set<StateFilter> targets) {
+    public static void unbanResetFilters(Set<StateFilter> targets) {
         TheGameOfLifeMod.BANNED_RESET_FILTERS.removeAll(targets);
         TheGameOfLifeMod.UNBANNED_RESET_FILTERS.addAll(targets);
+    }
+
+    public static void snap() {
         TheGameOfLifeMod.currentRuleVersion++;
         System.out.println("!!! РАЗБАН ФИЛЬТРОВ (ОБНУЛЕНИЕ): Эпоха " + TheGameOfLifeMod.currentRuleVersion);
     }
@@ -238,28 +246,46 @@ public class WorldHacker {
                 if (secIdx >= 0 && secIdx < sections.length) {
                     LevelChunkSection section = sections[secIdx];
                     if (section != null) {
-                        // Пишем напрямую в память. Никакой физики, никаких onRemove и onPlace!
                         section.setBlockState(syncPos.getX() & 15, y & 15, syncPos.getZ() & 15, state);
                     }
                 }
                 chunkMemory.remove(pos);
             });
 
+            // =========================================================
+            // УБИЙЦА ПРИЗРАКОВ: Стирание тиков и удаление BlockEntity
+            // =========================================================
             data.blocksToModify.forEach((pos, newState) -> {
                 syncPos.set(pos);
                 int y = syncPos.getY();
                 int secIdx = (y - minBuildHeight) >> 4;
+                BlockState originalState = data.blocksToBackup.get(pos);
 
+                // 1. Бесшумное удаление в палитре
                 if (secIdx >= 0 && secIdx < sections.length) {
                     LevelChunkSection section = sections[secIdx];
                     if (section != null) {
-                        // Бесшумное удаление. Вода за границей чанка ничего не узнает.
                         section.setBlockState(syncPos.getX() & 15, y & 15, syncPos.getZ() & 15, newState);
                     }
                 }
 
-                BlockState originalState = data.blocksToBackup.get(pos);
-                if (originalState != null) chunkMemory.putIfAbsent(pos, originalState);
+                // 2. Уничтожение остаточных данных сервера
+                if (originalState != null) {
+                    if (originalState.hasBlockEntity()) {
+                        chunk.removeBlockEntity(syncPos);
+                    }
+
+                    // Стираем запланированные тики (вода, песок, красная пыль)
+                    net.minecraft.world.level.levelgen.structure.BoundingBox bb =
+                            new net.minecraft.world.level.levelgen.structure.BoundingBox(
+                                    syncPos.getX(), syncPos.getY(), syncPos.getZ(),
+                                    syncPos.getX(), syncPos.getY(), syncPos.getZ()
+                            );
+                    level.getBlockTicks().clearArea(bb);
+                    level.getFluidTicks().clearArea(bb);
+
+                    chunkMemory.putIfAbsent(pos, originalState);
+                }
             });
 
             chunk.markUnsaved();
