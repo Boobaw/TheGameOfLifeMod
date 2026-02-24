@@ -23,7 +23,7 @@ public class WorldHacker {
     // УМНАЯ ОЧЕРЕДЬ: защищает от дублирования задач для одного чанка
     private static final ConcurrentHashMap<Long, Integer> PENDING_TASKS = new ConcurrentHashMap<>();
 
-    public static void tickRadar(MinecraftServer server) {
+    public static void tickBlockRadar(MinecraftServer server) {
         final int targetVersion = TheGameOfLifeMod.currentRuleVersion;
 
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {

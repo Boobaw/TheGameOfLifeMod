@@ -5,6 +5,7 @@
 	"mixins": [
 		"LevelMixin",
 		"ServerLevelMixin",
+		"ItemStackMixin",
 		"FlowingFluidMixin"
 	],
 	"injectors": {
