@@ -122,69 +122,132 @@ public class TheGameOfLifeMod implements ModInitializer {
 			ItemHacker.toggleItem(SERVER, Items.ELYTRA);
 		});
 
-		// Команда на Алмазный меч
-		COMMAND_MAP.put("sword", player -> {
-			ItemHacker.toggleItem(SERVER, Items.DIAMOND_SWORD);
+		// =========================================
+// ТЕСТЫ ITEM HACKER (Запрет и Бюро находок)
+// =========================================
+
+// Команда на Элитру (проверка неполных стаков и прочности)
+		COMMAND_MAP.put("elytra", player -> {
+			ItemHacker.toggleItem(SERVER, Items.ELYTRA);
 		});
 
-		COMMAND_MAP.put("potions", player -> {
-			// Просто просим игру дать нам стандартный компонент зелья!
-			var potionConsumable = new ItemStack(Items.POTION).get(DataComponents.CONSUMABLE);
+// Команда на Золотое яблоко (проверка стакания после возврата)
+		COMMAND_MAP.put("gapple", player -> {
+			ItemHacker.toggleItem(SERVER, Items.GOLDEN_APPLE);
+		});
 
+// Команда на Динамит (проверка изъятия блоков из сундуков)
+		COMMAND_MAP.put("tnt_item", player -> {
+			ItemHacker.toggleItem(SERVER, Items.TNT);
+		});
+
+
+// =========================================
+// ТЕСТЫ ENTITY HACKER (Камень Души)
+// =========================================
+
+// Команда на Зомби (проверка сохранения брони и оружия в руках)
+		COMMAND_MAP.put("zombie", player -> {
+			EntityHacker.toggleEntity(SERVER, EntityType.ZOMBIE);
+		});
+
+// Команда на Жителя (проверка сохранения профессии и торгов!)
+		COMMAND_MAP.put("villager", player -> {
+			EntityHacker.toggleEntity(SERVER, EntityType.VILLAGER);
+		});
+
+// Команда на Вагонетку с сундуком (проверка сохранения лута ВНУТРИ энтити)
+		COMMAND_MAP.put("chest_minecart", player -> {
+			EntityHacker.toggleEntity(SERVER, EntityType.CHEST_MINECART);
+		});
+
+// Команда на Стойку для брони (проверка энтити-декораций)
+		COMMAND_MAP.put("armor_stand", player -> {
+			EntityHacker.toggleEntity(SERVER, EntityType.ARMOR_STAND);
+		});
+
+
+		// =========================================
+		// ТЕСТЫ DATA HACKER (ДНК-Хакер и Компоненты)
+		// =========================================
+
+		// Команда на Зелья (твоя базовая проверка)
+		COMMAND_MAP.put("potions", player -> {
+			var potionConsumable = new ItemStack(Items.POTION).get(DataComponents.CONSUMABLE);
 			DataHacker.toggleRule(SERVER, "rule_potions", DataComponents.CONSUMABLE, potionConsumable);
 		});
 
-		COMMAND_MAP.put("apple_power", player -> {
-			// Копируем свойства еды прямо с ванильного яблока
-			var appleFood = new ItemStack(Items.APPLE).get(DataComponents.FOOD);
+		// Команда на "Всё съедобно" (Берем компонент еды от яблока и вешаем на всё, что в руках)
+		COMMAND_MAP.put("make_food", player -> {
+			var foodComp = new ItemStack(Items.APPLE).get(DataComponents.FOOD);
+			var consumableComp = new ItemStack(Items.APPLE).get(DataComponents.CONSUMABLE);
 
-			DataHacker.toggleRule(SERVER, "rule_apples", DataComponents.FOOD, appleFood);
+			DataHacker.toggleRule(SERVER, "rule_food", DataComponents.FOOD, foodComp);
+			DataHacker.toggleRule(SERVER, "rule_consumable", DataComponents.CONSUMABLE, consumableComp);
 		});
 
-		// ЭЛИТРА ИЗ ЧЕГО УГОДНО (Позволяет летать, если взять предмет в руки/надеть)
-		COMMAND_MAP.put("glider", player -> {
-			DataHacker.toggleRule(SERVER, "rule_glider", DataComponents.GLIDER, net.minecraft.util.Unit.INSTANCE);
-		});
-
-		// НЕРАЗРУШИМОСТЬ (Исправленный вариант под твои маппинги)
-		COMMAND_MAP.put("immortal", player -> {
-			DataHacker.toggleRule(SERVER, "rule_immortal", DataComponents.UNBREAKABLE, net.minecraft.util.Unit.INSTANCE);
-		});
-
-		// ПРОХОДЯЩИЙ СКВОЗЬ СТЕНЫ СНАРЯД (Если применить к стрелам или снежкам)
-		COMMAND_MAP.put("ghost_arrow", player -> {
-			DataHacker.toggleRule(SERVER, "rule_ghost_projectile", DataComponents.INTANGIBLE_PROJECTILE, net.minecraft.util.Unit.INSTANCE);
-		});
-
-		// СТАК 99 (Переопределяет лимит стака)
-		COMMAND_MAP.put("stack99", player -> {
-			DataHacker.toggleRule(SERVER, "rule_stack99", DataComponents.MAX_STACK_SIZE, 99);
-		});
-
-		// ЦВЕТНОЕ КАСТОМНОЕ ИМЯ
-		COMMAND_MAP.put("rename_red", player -> {
-			net.minecraft.network.chat.Component name = net.minecraft.network.chat.Component.literal("Хакерский Предмет").withStyle(net.minecraft.ChatFormatting.RED);
-			DataHacker.toggleRule(SERVER, "rule_rename", DataComponents.CUSTOM_NAME, name);
-		});
-
-		// УБРАТЬ АНИМАЦИЮ И УРОН (Предмет выглядит целым, но damage = 0)
-		COMMAND_MAP.put("fix_damage", player -> {
-			DataHacker.toggleRule(SERVER, "rule_fix", DataComponents.DAMAGE, 0);
-		});
-
-		// СВЕЧЕНИЕ (Глитч-эффект зачарования без самих чаров)
+		// Команда на магическое свечение (Glint) для любого предмета в руках
 		COMMAND_MAP.put("glint", player -> {
 			DataHacker.toggleRule(SERVER, "rule_glint", DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
 		});
 
-		// ЭПИЧЕСКАЯ РЕДКОСТЬ (Делает название предмета розовым)
-		COMMAND_MAP.put("epic", player -> {
-			DataHacker.toggleRule(SERVER, "rule_epic", DataComponents.RARITY, net.minecraft.world.item.Rarity.EPIC);
+				// =========================================
+		// ЭКСТРЕМАЛЬНЫЕ ТЕСТЫ DATA HACKER (Компоненты 1.21.11)
+		// =========================================
+
+		// 1. Тест "Тотем Бессмертия" (DeathProtection)
+		// Превращает ЛЮБОЙ предмет в руках (даже кусок земли) в рабочий тотем.
+		COMMAND_MAP.put("totem", player -> {
+			var deathProtection = new ItemStack(Items.TOTEM_OF_UNDYING).get(DataComponents.DEATH_PROTECTION);
+			if (deathProtection != null) {
+				DataHacker.toggleRule(SERVER, "rule_totem", DataComponents.DEATH_PROTECTION, deathProtection);
+			}
 		});
 
-		// КРАСНЫЙ ОШЕЙНИК ВОЛКА (Если применить это к яйцу призыва волка, он заспавнится с красным ошейником!)
-		COMMAND_MAP.put("red_collar", player -> {
-			DataHacker.toggleRule(SERVER, "rule_collar", DataComponents.WOLF_COLLAR, net.minecraft.world.item.DyeColor.RED);
+		// 2. Тест "Иерихонская труба" (InstrumentComponent - тот, что выделен на скрине!)
+		// Теперь при нажатии ПКМ любым предметом он будет трубить как козий рог.
+		COMMAND_MAP.put("horn", player -> {
+			var instrument = new ItemStack(Items.GOAT_HORN).get(DataComponents.INSTRUMENT);
+			if (instrument != null) {
+				DataHacker.toggleRule(SERVER, "rule_horn", DataComponents.INSTRUMENT, instrument);
+			}
+		});
+
+		// 3. Тест "Несгораемый" (DamageResistant)
+		// Дает предметам огнеупорность незерита. Если выкинуть предмет в лаву - он не сгорит!
+		COMMAND_MAP.put("fire_proof", player -> {
+			var damageResistant = new ItemStack(Items.NETHERITE_SCRAP).get(DataComponents.DAMAGE_RESISTANT);
+			if (damageResistant != null) {
+				DataHacker.toggleRule(SERVER, "rule_fire_proof", DataComponents.DAMAGE_RESISTANT, damageResistant);
+			}
+		});
+
+		// 4. Тест "Абсолютный блок" (BlocksAttacks)
+		// Позволяет блокировать урон мечом, киркой или палкой, как если бы это был щит.
+		COMMAND_MAP.put("shield", player -> {
+			var blocksAttacks = new ItemStack(Items.SHIELD).get(DataComponents.BLOCKS_ATTACKS);
+			if (blocksAttacks != null) {
+				DataHacker.toggleRule(SERVER, "rule_shield", DataComponents.BLOCKS_ATTACKS, blocksAttacks);
+			}
+		});
+
+		// 5. Тест "Клеймо Хакера" (ItemLore)
+		// Насильно вписываем кастомный текст в описание всем предметам в инвентарях игроков.
+		COMMAND_MAP.put("lore", player -> {
+			// Тут мы создаем компонент с нуля, чтобы проверить работу конструкторов
+			var customLore = new net.minecraft.world.item.component.ItemLore(
+					java.util.List.of(net.minecraft.network.chat.Component.literal("§c§lВЗЛОМАНО DATAHACKER"))
+			);
+			DataHacker.toggleRule(SERVER, "rule_lore", DataComponents.LORE, customLore);
+		});
+
+		// 6. Тест "Подозрительный суп" (SuspiciousStewEffects)
+		// Вешаем на любой предмет эффекты, которые он выдаст при съедании (сочетается с командой make_food из прошлого ответа)
+		COMMAND_MAP.put("poison_pill", player -> {
+			var stewEffects = new ItemStack(Items.SUSPICIOUS_STEW).get(DataComponents.SUSPICIOUS_STEW_EFFECTS);
+			if (stewEffects != null) {
+				DataHacker.toggleRule(SERVER, "rule_stew", DataComponents.SUSPICIOUS_STEW_EFFECTS, stewEffects);
+			}
 		});
 	}
 
