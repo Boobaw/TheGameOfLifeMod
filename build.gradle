@@ -40,7 +40,7 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-	implementation "com.alphacephei:vosk:0.3.45"
+	implementation  'io.github.givimad:whisper-jni:1.6.1'
 
 	// FAWE
 	//modCompileOnly files("libs/worldedit-fabric-mc1.21.11-2.15.1-SNAPSHOT.jar")

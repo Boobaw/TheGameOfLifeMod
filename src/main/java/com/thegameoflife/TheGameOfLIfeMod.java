@@ -11,14 +11,18 @@ import org.slf4j.LoggerFactory;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 
+import static net.minecraft.commands.Commands.literal;
 
 
 public class TheGameOfLIfeMod implements ModInitializer {
@@ -39,7 +43,6 @@ public class TheGameOfLIfeMod implements ModInitializer {
 		
 		COMMAND_MAP.put("режим русский", () -> VoiceServer.setMode(VoiceServer.VoiceMode.RU));
 		COMMAND_MAP.put("режим английский", () -> VoiceServer.setMode(VoiceServer.VoiceMode.EN));
-		COMMAND_MAP.put("режим авто", () -> VoiceServer.setMode(VoiceServer.VoiceMode.AUTO));
 		//COMMAND_MAP.put("dirt", () -> printLoadedChunks(SERVER.overworld()));
 	}
 
@@ -50,6 +53,16 @@ public class TheGameOfLIfeMod implements ModInitializer {
 	public void onInitialize() {
 		VoiceNetworking.registerPayloads();
 		VoiceServer.registerNetworking(); // Регистрируем прием пакетов СРАЗУ
+
+		// Регистрация команды /voice status
+		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+			dispatcher.register(literal("voice")
+				.then(literal("status").executes(context -> {
+					context.getSource().sendSuccess(() -> VoiceServer.getStatus(), false);
+					return 1;
+				}))
+			);
+		});
 
 		// Получаем сервер (официальный lifecycle event)
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> {
