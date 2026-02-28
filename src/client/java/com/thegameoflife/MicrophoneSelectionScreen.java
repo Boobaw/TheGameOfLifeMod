@@ -1,22 +1,24 @@
 package com.thegameoflife;
 
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.network.chat.Component;
-
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.Mixer;
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.Line;
+import javax.sound.sampled.Mixer;
+import javax.sound.sampled.TargetDataLine;
+
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 public class MicrophoneSelectionScreen extends Screen {
 
     private final Screen parent;
     private final AudioRecorderMod recorder;
-
-    private Mixer.Info[] mics = new Mixer.Info[0];
-    private int index = 0;
+    private final List<Mixer.Info> inputDevices = new ArrayList<>();
+    private int currentIndex = 0;
 
     public MicrophoneSelectionScreen(Screen parent, AudioRecorderMod recorder) {
         super(Component.literal("Microphone Selection"));
@@ -26,68 +28,116 @@ public class MicrophoneSelectionScreen extends Screen {
 
     @Override
     protected void init() {
-        mics = listAllMixers(); // сначала просто ВСЕ, чтобы точно что-то было
-        if (mics.length == 0) index = 0;
-        else if (index >= mics.length) index = 0;
+        inputDevices.clear();
+        // Добавляем вариант "По умолчанию" (null)
+        inputDevices.add(null);
 
-        int w = 220;
-        int h = 20;
-        int x = this.width / 2 - w / 2;
-        int y = this.height / 2;
+        // Фильтруем микшеры, оставляя только те, что поддерживают запись (TargetDataLine)
+        try {
+            Mixer.Info[] allMixers = AudioSystem.getMixerInfo();
+            if (allMixers != null) {
+                for (Mixer.Info info : allMixers) {
+                    try {
+                        Mixer mixer = AudioSystem.getMixer(info);
+                        if (mixer.isLineSupported(new Line.Info(TargetDataLine.class))) {
+                            inputDevices.add(info);
+                        }
+                    } catch (Throwable e) {
+                        // Игнорируем устройства, которые не удалось открыть
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            // Игнорируем ошибки аудиосистемы
+        }
 
-        this.addRenderableWidget(Button.builder(Component.literal("< Prev"), b -> {
-            if (mics.length == 0) return;
-            index = (index - 1 + mics.length) % mics.length;
-        }).bounds(x, y, 105, h).build());
+        // Пытаемся найти текущий выбранный микрофон в списке
+        String currentName = recorder.getSelectedMixerName();
+        currentIndex = 0; // По умолчанию 0 (Default)
 
-        this.addRenderableWidget(Button.builder(Component.literal("Next >"), b -> {
-            if (mics.length == 0) return;
-            index = (index + 1) % mics.length;
-        }).bounds(x + 115, y, 105, h).build());
+        if (!"Default".equals(currentName)) {
+            for (int i = 1; i < inputDevices.size(); i++) {
+                Mixer.Info info = inputDevices.get(i);
+                if (info != null && info.getName().equals(currentName)) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+        }
 
+        int centerY = this.height / 2;
+        int centerX = this.width / 2;
+
+        // Сдвигаем кнопки ниже, чтобы освободить место для текста
+        int buttonY = centerY + 10;
+
+        // Кнопка "Назад" (<)
+        this.addRenderableWidget(Button.builder(Component.literal("<"), b -> {
+            if (!inputDevices.isEmpty()) {
+                currentIndex = (currentIndex - 1 + inputDevices.size()) % inputDevices.size();
+            }
+        }).bounds(centerX - 120, buttonY, 20, 20).build());
+
+        // Кнопка "Вперед" (>)
+        this.addRenderableWidget(Button.builder(Component.literal(">"), b -> {
+            if (!inputDevices.isEmpty()) {
+                currentIndex = (currentIndex + 1) % inputDevices.size();
+            }
+        }).bounds(centerX + 100, buttonY, 20, 20).build());
+
+        // Кнопка "Выбрать"
         this.addRenderableWidget(Button.builder(Component.literal("Select"), b -> {
-            if (mics.length == 0) return;
-            recorder.setSelectedMixer(mics[index]);
-        }).bounds(x, y + 30, w, h).build());
+            if (!inputDevices.isEmpty()) {
+                recorder.setSelectedMixer(inputDevices.get(currentIndex));
+            }
+        }).bounds(centerX - 50, buttonY + 30, 100, 20).build());
 
-        this.addRenderableWidget(Button.builder(Component.literal("Back"), b -> {
+        // Кнопка "Готово"
+        this.addRenderableWidget(Button.builder(Component.literal("Done"), b -> {
             this.minecraft.setScreen(parent);
-        }).bounds(x, y + 60, w, h).build());
-    }
-
-    private static Mixer.Info[] listAllMixers() {
-        return AudioSystem.getMixerInfo();
+        }).bounds(centerX - 50, buttonY + 55, 100, 20).build());
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
+        try {
+            this.renderBackground(g, mouseX, mouseY, delta);
+        } catch (Throwable ignored) {
+            // Если метод не найден (разные версии MC) или ошибка, рисуем фон вручную
+            g.fill(0, 0, this.width, this.height, 0xCC000000);
+        }
         super.render(g, mouseX, mouseY, delta);
 
-        int centerX = this.width / 2;
+        g.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFFFF);
 
-        int boxW = Math.min(this.width - 40, 520);
-        int boxX1 = centerX - boxW / 2;
-        int boxX2 = centerX + boxW / 2;
-        int boxY1 = 15;
-        int boxY2 = 110;
+        int centerY = this.height / 2;
 
-        g.fill(boxX1, boxY1, boxX2, boxY2, 0xCC000000);
+        if (inputDevices.isEmpty()) {
+            g.drawCenteredString(this.font, "No microphones found", this.width / 2, centerY - 20, 0xFFFF5555);
+            return;
+        }
 
-        String browse = (mics.length == 0) ? "<none>" : mics[index].getName();
-        String selected = recorder.getSelectedMixerName();
+        if (currentIndex >= inputDevices.size()) currentIndex = 0;
+        Mixer.Info info = inputDevices.get(currentIndex);
+        String name = (info == null) ? "Default System Device" : info.getName();
+        String desc = (info == null) ? "Uses the OS default microphone" : info.getDescription();
 
-        g.drawCenteredString(this.font, Component.literal("MIC DEBUG"), centerX, 22, 0xFFFFFF);
-        g.drawCenteredString(this.font, Component.literal("count=" + mics.length + " index=" + index), centerX, 38, 0xFFFFFF);
-        g.drawCenteredString(this.font, Component.literal("browse: " + browse), centerX, 54, 0xFFFF55);
-        g.drawCenteredString(this.font, Component.literal("selected: " + selected), centerX, 70, 0x55FF55);
-        g.drawCenteredString(this.font, Component.literal("If count=0 -> JavaSound sees no mixers"), centerX, 90, 0xFF5555);
-    }
+        // Позиция текста выше кнопок
+        int textY = centerY - 40;
 
-    private String trim(String s, int boxW) {
-        // грубо: если очень длинно — обрежем
-        int max = Math.max(10, boxW / 6);
-        if (s == null) return "";
-        if (s.length() <= max) return s;
-        return s.substring(0, max - 3) + "...";
+        // Индикация текущего выбора (над названием)
+        String selectedName = recorder.getSelectedMixerName();
+        boolean isSelected = (info == null && "Default".equals(selectedName)) ||
+                             (info != null && info.getName().equals(selectedName));
+
+        if (isSelected) {
+            g.drawCenteredString(this.font, Component.literal("[ Selected ]"), this.width / 2, textY - 15, 0xFF55FF55);
+        }
+
+        // Отображаем имя устройства
+        g.drawCenteredString(this.font, Component.literal(name), this.width / 2, textY, 0xFFFFFFFF);
+        
+        // Отображаем описание (серым)
+        g.drawCenteredString(this.font, Component.literal(desc), this.width / 2, textY + 15, 0xFFAAAAAA);
     }
 }
