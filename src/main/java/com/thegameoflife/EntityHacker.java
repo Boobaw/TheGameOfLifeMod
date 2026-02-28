@@ -13,9 +13,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class EntityHacker {
@@ -50,23 +48,28 @@ public class EntityHacker {
     }
 
     // =========================================
-    // УМНЫЙ ПЕРЕКЛЮЧАТЕЛЬ ЭНТИТИ (Щелчок Таноса)
+    // УМНЫЙ ПЕРЕКЛЮЧАТЕЛЬ ЭНТИТИ (Щелчок Таноса - Массовый)
     // =========================================
-    public static void toggleEntity(MinecraftServer server, EntityType<?> targetType) {
-        boolean foundAndDeleted = false;
+    public static void toggleEntity(MinecraftServer server, Set<EntityType<?>> targetTypes) {
+        if (targetTypes == null || targetTypes.isEmpty()) return;
 
-        List<CompoundTag> savedTags = SAVED_ENTITIES.computeIfAbsent(targetType, k -> new ArrayList<>());
+        // Запоминаем, какие именно типы мы реально нашли и удалили
+        Set<EntityType<?>> foundAndDeletedTypes = new HashSet<>();
 
-        // 1. ФАЗА БАНА: Ищем и удаляем везде
+        // 1. ФАЗА БАНА: Ищем и удаляем везде (ОДИН проход по всем мирам)
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
 
-                // === ДОБАВЬ ЭТУ СТРОКУ (Защита от удаленных в этом же тике сущностей) ===
+                // Защита от удаленных в этом же тике сущностей
                 if (entity == null) continue;
 
-                if (entity.getType() == targetType && !(entity instanceof ServerPlayer)) {
+                EntityType<?> currentType = entity.getType();
 
-                    // ... (дальше идет твой код с ProblemReporter и TagValueOutput) ...
+                // Если тип сущности есть в нашем списке на удаление и это не игрок
+                if (targetTypes.contains(currentType) && !(entity instanceof ServerPlayer)) {
+
+                    // Получаем список сохранений конкретно для ЭТОГО типа сущности
+                    List<CompoundTag> savedTags = SAVED_ENTITIES.computeIfAbsent(currentType, k -> new ArrayList<>());
 
                     // ==========================================
                     // НОВАЯ СИСТЕМА СОХРАНЕНИЯ NBT (1.21+)
@@ -81,61 +84,69 @@ public class EntityHacker {
                     CompoundTag tag = (CompoundTag) output.buildResult();
 
                     // Вручную дописываем метаданные
-                    tag.putString("id", EntityType.getKey(entity.getType()).toString());
+                    tag.putString("id", EntityType.getKey(currentType).toString());
                     // Извлекаем чистый ID измерения
                     tag.putString("datahacker_dim", level.dimension().identifier().toString());
+
                     savedTags.add(tag);
                     entity.discard();
-                    foundAndDeleted = true;
+
+                    // Отмечаем, что этот конкретный тип был удален
+                    foundAndDeletedTypes.add(currentType);
                 }
             }
         }
 
-        // 2. ФАЗА БАНА ИЛИ ВОСКРЕШЕНИЯ
-        if (foundAndDeleted) {
-            TheGameOfLifeMod.UNBANNED_ENTITIES.remove(targetType);
-            TheGameOfLifeMod.BANNED_ENTITIES.add(targetType);
-            System.out.println("[EntityHacker] " + EntityType.getKey(targetType) + " ЗАБАНЕН! Собрано душ: " + savedTags.size());
-        } else {
-            TheGameOfLifeMod.BANNED_ENTITIES.remove(targetType);
-            TheGameOfLifeMod.UNBANNED_ENTITIES.add(targetType);
-            System.out.println("[EntityHacker] " + EntityType.getKey(targetType) + " РАЗБАНЕН!");
+        // 2. ФАЗА БАНА ИЛИ ВОСКРЕШЕНИЯ (Разбираемся с каждым типом по отдельности)
+        for (EntityType<?> targetType : targetTypes) {
+            List<CompoundTag> savedTags = SAVED_ENTITIES.computeIfAbsent(targetType, k -> new ArrayList<>());
 
-            if (!savedTags.isEmpty()) {
-                // А. ВОСКРЕШЕНИЕ
-                System.out.println("[EntityHacker] Воскрешаем " + savedTags.size() + " сущностей...");
-
-                for (CompoundTag tag : savedTags) {
-                    // Чтение с .orElse для обхода Optional
-                    String savedDim = tag.getString("datahacker_dim").orElse("minecraft:overworld");
-
-                    ResourceKey<net.minecraft.world.level.Level> dimKey = ResourceKey.create(
-                            Registries.DIMENSION,
-                            Identifier.parse(savedDim)
-                    );
-
-                    ServerLevel targetLevel = server.getLevel(dimKey);
-                    if (targetLevel != null) {
-                        EntityType.loadEntityRecursive(tag, targetLevel, EntitySpawnReason.COMMAND, entity -> {
-                            targetLevel.addFreshEntity(entity);
-                            return entity;
-                        });
-                    }
-                }
-                savedTags.clear();
-
+            // Если хотя бы одна сущность ЭТОГО типа была удалена
+            if (foundAndDeletedTypes.contains(targetType)) {
+                TheGameOfLifeMod.UNBANNED_ENTITIES.remove(targetType);
+                TheGameOfLifeMod.BANNED_ENTITIES.add(targetType);
+                System.out.println("[EntityHacker] " + EntityType.getKey(targetType) + " ЗАБАНЕН! Собрано душ: " + savedTags.size());
             } else {
-                // Б. ЗАПАСНОЙ СПАВН
-                System.out.println("[EntityHacker] Сохраненных душ нет. Спавним дефолтных возле игроков.");
+                TheGameOfLifeMod.BANNED_ENTITIES.remove(targetType);
+                TheGameOfLifeMod.UNBANNED_ENTITIES.add(targetType);
+                System.out.println("[EntityHacker] " + EntityType.getKey(targetType) + " РАЗБАНЕН!");
 
-                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                    ServerLevel level = player.level();
-                    BlockPos spawnPos = findSafeSpawnNearPlayer(level, player.blockPosition());
+                if (!savedTags.isEmpty()) {
+                    // А. ВОСКРЕШЕНИЕ
+                    System.out.println("[EntityHacker] Воскрешаем " + savedTags.size() + " сущностей (" + EntityType.getKey(targetType) + ")...");
 
-                    Entity newEntity = targetType.create(level, EntitySpawnReason.COMMAND);
-                    if (newEntity != null) {
-                        newEntity.setPos(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D);
-                        level.addFreshEntity(newEntity);
+                    for (CompoundTag tag : savedTags) {
+                        // Чтение с .orElse для обхода Optional
+                        String savedDim = tag.getString("datahacker_dim").orElse("minecraft:overworld");
+
+                        ResourceKey<net.minecraft.world.level.Level> dimKey = ResourceKey.create(
+                                Registries.DIMENSION,
+                                Identifier.parse(savedDim)
+                        );
+
+                        ServerLevel targetLevel = server.getLevel(dimKey);
+                        if (targetLevel != null) {
+                            EntityType.loadEntityRecursive(tag, targetLevel, EntitySpawnReason.COMMAND, entity -> {
+                                targetLevel.addFreshEntity(entity);
+                                return entity;
+                            });
+                        }
+                    }
+                    savedTags.clear();
+
+                } else {
+                    // Б. ЗАПАСНОЙ СПАВН
+                    System.out.println("[EntityHacker] Сохраненных душ (" + EntityType.getKey(targetType) + ") нет. Спавним дефолтных возле игроков.");
+
+                    for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                        ServerLevel level = player.level();
+                        BlockPos spawnPos = findSafeSpawnNearPlayer(level, player.blockPosition()); // Убедись, что этот метод у тебя есть
+
+                        Entity newEntity = targetType.create(level, EntitySpawnReason.COMMAND);
+                        if (newEntity != null) {
+                            newEntity.setPos(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D);
+                            level.addFreshEntity(newEntity);
+                        }
                     }
                 }
             }

@@ -22,10 +22,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ItemHacker {
@@ -123,54 +120,71 @@ public class ItemHacker {
     }
 
     // =========================================
-    // УМНЫЙ ПЕРЕКЛЮЧАТЕЛЬ ПРЕДМЕТОВ (TOGGLE)
-    // =========================================
-    public static void toggleItem(MinecraftServer server, Item targetItem) {
-        boolean foundAndDeleted = false;
-        List<ItemRecord> savedRecords = SAVED_ITEMS.computeIfAbsent(targetItem, k -> new ArrayList<>());
+// УМНЫЙ ПЕРЕКЛЮЧАТЕЛЬ ПРЕДМЕТОВ (TOGGLE - Массовый)
+// =========================================
+    public static void toggleItem(MinecraftServer server, Set<Item> targetItems) {
+        if (targetItems == null || targetItems.isEmpty()) return;
 
-        // 1. Игроки
+        // Запоминаем, какие предметы мы реально нашли и стерли в этом проходе
+        Set<Item> foundAndDeletedItems = new HashSet<>();
+
+        // 1. Игроки (Один проход по всем)
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             boolean playerChanged = false;
             String dim = player.level().dimension().identifier().toString();
 
             for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
                 ItemStack stack = player.getInventory().getItem(i);
-                if (stack.is(targetItem)) {
+
+                if (!stack.isEmpty() && targetItems.contains(stack.getItem())) {
+                    Item currentItem = stack.getItem();
+                    List<ItemRecord> savedRecords = SAVED_ITEMS.computeIfAbsent(currentItem, k -> new ArrayList<>());
+
                     try {
                         savedRecords.add(new ItemRecord(stack.copy(), dim, player.blockPosition(), player.getUUID(), i, "PLAYER"));
                     } catch (Exception ex) {}
 
                     player.getInventory().setItem(i, ItemStack.EMPTY);
-                    foundAndDeleted = true;
+                    foundAndDeletedItems.add(currentItem);
                     playerChanged = true;
                 }
             }
             if (playerChanged) player.inventoryMenu.broadcastChanges();
         }
 
-        // 2. Мир и Сундуки
+        // 2. Мир и Сундуки (Один проход по мирам)
         for (ServerLevel level : server.getAllLevels()) {
             String dim = level.dimension().identifier().toString();
 
             for (Entity e : level.getAllEntities()) {
                 if (e instanceof ServerPlayer) continue;
 
-                if (e instanceof ItemEntity item && item.getItem().is(targetItem)) {
+                if (e instanceof ItemEntity item && !item.getItem().isEmpty() && targetItems.contains(item.getItem().getItem())) {
+                    Item currentItem = item.getItem().getItem();
+                    List<ItemRecord> savedRecords = SAVED_ITEMS.computeIfAbsent(currentItem, k -> new ArrayList<>());
+
                     try { savedRecords.add(new ItemRecord(item.getItem().copy(), dim, item.blockPosition(), null, -1, "DROP")); } catch (Exception ex) {}
                     item.discard();
-                    foundAndDeleted = true;
-                } else if (e instanceof ItemFrame frame && frame.getItem().is(targetItem)) {
+                    foundAndDeletedItems.add(currentItem);
+
+                } else if (e instanceof ItemFrame frame && !frame.getItem().isEmpty() && targetItems.contains(frame.getItem().getItem())) {
+                    Item currentItem = frame.getItem().getItem();
+                    List<ItemRecord> savedRecords = SAVED_ITEMS.computeIfAbsent(currentItem, k -> new ArrayList<>());
+
                     try { savedRecords.add(new ItemRecord(frame.getItem().copy(), dim, frame.blockPosition(), frame.getUUID(), -1, "ENTITY")); } catch (Exception ex) {}
                     frame.setItem(ItemStack.EMPTY);
-                    foundAndDeleted = true;
+                    foundAndDeletedItems.add(currentItem);
+
                 } else if (e instanceof LivingEntity living) {
                     for (EquipmentSlot slot : EquipmentSlot.values()) {
                         ItemStack stack = living.getItemBySlot(slot);
-                        if (stack.is(targetItem)) {
+                        if (!stack.isEmpty() && targetItems.contains(stack.getItem())) {
+                            Item currentItem = stack.getItem();
+                            List<ItemRecord> savedRecords = SAVED_ITEMS.computeIfAbsent(currentItem, k -> new ArrayList<>());
+
                             try { savedRecords.add(new ItemRecord(stack.copy(), dim, living.blockPosition(), living.getUUID(), slot.ordinal(), "LIVING")); } catch (Exception ex) {}
                             living.setItemSlot(slot, ItemStack.EMPTY);
-                            foundAndDeleted = true;
+                            foundAndDeletedItems.add(currentItem);
                         }
                     }
                 }
@@ -194,11 +208,14 @@ public class ItemHacker {
                                     if (be instanceof Container container) {
                                         for (int i = 0; i < container.getContainerSize(); i++) {
                                             ItemStack stack = container.getItem(i);
-                                            if (stack.is(targetItem)) {
+                                            if (!stack.isEmpty() && targetItems.contains(stack.getItem())) {
+                                                Item currentItem = stack.getItem();
+                                                List<ItemRecord> savedRecords = SAVED_ITEMS.computeIfAbsent(currentItem, k -> new ArrayList<>());
+
                                                 try { savedRecords.add(new ItemRecord(stack.copy(), dim, be.getBlockPos(), null, i, "CONTAINER")); } catch (Exception ex) {}
                                                 container.setItem(i, ItemStack.EMPTY);
                                                 be.setChanged();
-                                                foundAndDeleted = true;
+                                                foundAndDeletedItems.add(currentItem);
                                             }
                                         }
                                     }
@@ -210,85 +227,90 @@ public class ItemHacker {
             }
         }
 
-        // 3. ФАЗА БАНА ИЛИ ВОЗВРАТА
-        if (foundAndDeleted) {
-            TheGameOfLifeMod.UNBANNED_ITEMS.remove(targetItem);
-            TheGameOfLifeMod.BANNED_ITEMS.add(targetItem);
-            System.out.println("[ItemHacker] ПРЕДМЕТ " + targetItem.toString() + " ЗАБАНЕН! Сохранено: " + savedRecords.size());
-        } else {
-            TheGameOfLifeMod.BANNED_ITEMS.remove(targetItem);
-            TheGameOfLifeMod.UNBANNED_ITEMS.add(targetItem);
-            System.out.println("[ItemHacker] ПРЕДМЕТ " + targetItem.toString() + " РАЗБАНЕН!");
+        // 3. ФАЗА БАНА ИЛИ ВОЗВРАТА (Индивидуально для каждого предмета из списка)
+        for (Item targetItem : targetItems) {
+            List<ItemRecord> savedRecords = SAVED_ITEMS.computeIfAbsent(targetItem, k -> new ArrayList<>());
 
-            if (!savedRecords.isEmpty()) {
-                for (ItemRecord record : savedRecords) {
-                    try {
-                        // Ищем нужный мир
-                        ResourceKey<net.minecraft.world.level.Level> dimKey = ResourceKey.create(Registries.DIMENSION, Identifier.parse(record.dimension));
-                        ServerLevel targetLevel = server.getLevel(dimKey);
-                        if (targetLevel == null) continue;
+            // Если этот конкретный предмет находили и удаляли
+            if (foundAndDeletedItems.contains(targetItem)) {
+                TheGameOfLifeMod.UNBANNED_ITEMS.remove(targetItem);
+                TheGameOfLifeMod.BANNED_ITEMS.add(targetItem);
+                System.out.println("[ItemHacker] ПРЕДМЕТ " + targetItem.toString() + " ЗАБАНЕН! Сохранено: " + savedRecords.size());
+            } else {
+                TheGameOfLifeMod.BANNED_ITEMS.remove(targetItem);
+                TheGameOfLifeMod.UNBANNED_ITEMS.add(targetItem);
+                System.out.println("[ItemHacker] ПРЕДМЕТ " + targetItem.toString() + " РАЗБАНЕН!");
 
-                        boolean restored = false;
+                if (!savedRecords.isEmpty()) {
+                    for (ItemRecord record : savedRecords) {
+                        try {
+                            // Ищем нужный мир
+                            ResourceKey<net.minecraft.world.level.Level> dimKey = ResourceKey.create(Registries.DIMENSION, Identifier.parse(record.dimension));
+                            ServerLevel targetLevel = server.getLevel(dimKey);
+                            if (targetLevel == null) continue;
 
-                        // Пытаемся вернуть предмет на законное место
-                        switch (record.type) {
-                            case "CONTAINER":
-                                BlockEntity be = targetLevel.getBlockEntity(record.fallbackPos);
-                                if (be instanceof Container container && container.getItem(record.slot).isEmpty()) {
-                                    container.setItem(record.slot, record.stack);
-                                    be.setChanged();
-                                    restored = true;
-                                }
-                                break;
-                            case "PLAYER":
-                                ServerPlayer p = server.getPlayerList().getPlayer(record.entityId);
-                                if (p != null) {
-                                    if (p.getInventory().getItem(record.slot).isEmpty()) {
-                                        p.getInventory().setItem(record.slot, record.stack);
-                                    } else {
-                                        p.getInventory().placeItemBackInInventory(record.stack);
-                                    }
-                                    restored = true;
-                                }
-                                break;
-                            case "ENTITY":
-                                Entity e = targetLevel.getEntity(record.entityId);
-                                if (e instanceof ItemFrame frame && frame.getItem().isEmpty()) {
-                                    frame.setItem(record.stack);
-                                    restored = true;
-                                }
-                                break;
-                            case "LIVING":
-                                Entity living = targetLevel.getEntity(record.entityId);
-                                if (living instanceof LivingEntity le) {
-                                    EquipmentSlot eqSlot = EquipmentSlot.values()[record.slot];
-                                    if (le.getItemBySlot(eqSlot).isEmpty()) {
-                                        le.setItemSlot(eqSlot, record.stack);
+                            boolean restored = false;
+
+                            // Пытаемся вернуть предмет на законное место
+                            switch (record.type) {
+                                case "CONTAINER":
+                                    BlockEntity be = targetLevel.getBlockEntity(record.fallbackPos);
+                                    if (be instanceof Container container && container.getItem(record.slot).isEmpty()) {
+                                        container.setItem(record.slot, record.stack);
+                                        be.setChanged();
                                         restored = true;
                                     }
-                                }
-                                break;
-                            case "DROP":
-                                // Дроп всегда восстанавливаем через фоллбэк
-                                break;
-                        }
+                                    break;
+                                case "PLAYER":
+                                    ServerPlayer p = server.getPlayerList().getPlayer(record.entityId);
+                                    if (p != null) {
+                                        if (p.getInventory().getItem(record.slot).isEmpty()) {
+                                            p.getInventory().setItem(record.slot, record.stack);
+                                        } else {
+                                            p.getInventory().placeItemBackInInventory(record.stack);
+                                        }
+                                        restored = true;
+                                    }
+                                    break;
+                                case "ENTITY":
+                                    Entity e = targetLevel.getEntity(record.entityId);
+                                    if (e instanceof ItemFrame frame && frame.getItem().isEmpty()) {
+                                        frame.setItem(record.stack);
+                                        restored = true;
+                                    }
+                                    break;
+                                case "LIVING":
+                                    Entity living = targetLevel.getEntity(record.entityId);
+                                    if (living instanceof LivingEntity le) {
+                                        EquipmentSlot eqSlot = EquipmentSlot.values()[record.slot];
+                                        if (le.getItemBySlot(eqSlot).isEmpty()) {
+                                            le.setItemSlot(eqSlot, record.stack);
+                                            restored = true;
+                                        }
+                                    }
+                                    break;
+                                case "DROP":
+                                    // Дроп всегда восстанавливаем через фоллбэк
+                                    break;
+                            }
 
-                        // Если не смогли вернуть (сундук сломали, рамку сбили, игрок вышел) -> бросаем на пол
-                        if (!restored) {
-                            ItemEntity drop = new ItemEntity(targetLevel, record.fallbackPos.getX() + 0.5, record.fallbackPos.getY() + 0.5, record.fallbackPos.getZ() + 0.5, record.stack);
-                            targetLevel.addFreshEntity(drop);
-                        }
+                            // Если не смогли вернуть (сундук сломали, рамку сбили, игрок вышел) -> бросаем на пол
+                            if (!restored) {
+                                ItemEntity drop = new ItemEntity(targetLevel, record.fallbackPos.getX() + 0.5, record.fallbackPos.getY() + 0.5, record.fallbackPos.getZ() + 0.5, record.stack);
+                                targetLevel.addFreshEntity(drop);
+                            }
 
-                    } catch (Exception e) {
-                        System.err.println("[ItemHacker] Ошибка при возврате предмета. Предмет уничтожен.");
+                        } catch (Exception e) {
+                            System.err.println("[ItemHacker] Ошибка при возврате предмета. Предмет уничтожен.");
+                        }
                     }
-                }
-                savedRecords.clear();
-            } else {
-                // Запасной план: если записей не было вообще (а мы разбаниваем)
-                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                    int maxStack = targetItem.getDefaultMaxStackSize();
-                    player.getInventory().placeItemBackInInventory(new ItemStack(targetItem, maxStack));
+                    savedRecords.clear();
+                } else {
+                    // Запасной план: если записей не было вообще (а мы разбаниваем)
+                    for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                        int maxStack = targetItem.getDefaultMaxStackSize();
+                        player.getInventory().placeItemBackInInventory(new ItemStack(targetItem, maxStack));
+                    }
                 }
             }
         }

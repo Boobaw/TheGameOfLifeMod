@@ -19,7 +19,13 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.thegameoflife.TheGameOfLifeMod.SERVER;
+
 public class WorldHacker {
+
+    // Переменная на случай если человек захочет инвертировать воздух
+    private static boolean IS_AIR_INVERTED = false;
+
     // УМНАЯ ОЧЕРЕДЬ: защищает от дублирования задач для одного чанка
     private static final ConcurrentHashMap<Long, Integer> PENDING_TASKS = new ConcurrentHashMap<>();
 
@@ -73,8 +79,40 @@ public class WorldHacker {
     // =========================================
     // УНИВЕРСАЛЬНЫЙ ПЕРЕКЛЮЧАТЕЛЬ (Блоки + Фильтры)
     // =========================================
-    public static void toggle(ServerPlayer player, Set<Block> targetBlocks, Set<StateFilter> targetFilters) {
+    public static void toggle(MinecraftServer server, Set<Block> targetBlocks, Set<StateFilter> targetFilters, boolean isReset) {
         boolean rulesChanged = false;
+
+        // Работа с исключениями (воздух и барьер)
+        boolean hasAir = targetBlocks.contains(net.minecraft.world.level.block.Blocks.AIR);
+        boolean hasBarrier = targetBlocks.contains(net.minecraft.world.level.block.Blocks.BARRIER);
+
+        if (hasAir && hasBarrier) {
+            // Тупо инвертируем флаг
+            IS_AIR_INVERTED = !IS_AIR_INVERTED;
+            System.out.println("[WorldHacker] Глобальная инверсия Воздух <-> Барьер! Теперь: " + IS_AIR_INVERTED);
+
+            // Убираем их из сета, чтобы сканер даже не пытался их искать
+            targetBlocks.remove(Blocks.AIR);
+            targetBlocks.remove(Blocks.BARRIER);
+
+            // Если кроме воздуха и барьера игрок ничего не просил - вообще отменяем сканирование чанков
+            if (targetBlocks.isEmpty() && targetFilters.isEmpty()) {
+                return;
+            }
+        }
+        // ==========================================
+        // СЦЕНАРИЙ 2: Заказан ТОЛЬКО воздух ИЛИ ТОЛЬКО барьер
+        // ==========================================
+        else if (hasAir) {
+            TheGameOfLifeMod.BANNED_BLOCKS.remove(net.minecraft.world.level.block.Blocks.BARRIER);
+        }
+        else if (hasBarrier) {
+            TheGameOfLifeMod.BANNED_BLOCKS.remove(net.minecraft.world.level.block.Blocks.AIR);
+        }
+
+        // Ссылки на нужные списки в зависимости от режима (Break или Reset)
+        Set<StateFilter> bannedFiltersSet = isReset ? TheGameOfLifeMod.BANNED_RESET_FILTERS : TheGameOfLifeMod.BANNED_BREAK_FILTERS;
+        Set<StateFilter> unbannedFiltersSet = isReset ? TheGameOfLifeMod.UNBANNED_RESET_FILTERS : TheGameOfLifeMod.UNBANNED_BREAK_FILTERS;
 
         // --- 1. СОРТИРОВКА БЛОКОВ ---
         Set<Block> toBanBlocks = new java.util.HashSet<>();
@@ -96,8 +134,8 @@ public class WorldHacker {
 
         if (targetFilters != null) {
             for (StateFilter filter : targetFilters) {
-                if (TheGameOfLifeMod.BANNED_RESET_FILTERS.contains(filter)) toUnbanFilters.add(filter);
-                else if (TheGameOfLifeMod.UNBANNED_RESET_FILTERS.contains(filter)) toBanFilters.add(filter);
+                if (bannedFiltersSet.contains(filter)) toUnbanFilters.add(filter);
+                else if (unbannedFiltersSet.contains(filter)) toBanFilters.add(filter);
                 else toScanFilters.add(filter);
             }
         }
@@ -105,20 +143,31 @@ public class WorldHacker {
         // --- 3. ОБРАБАТЫВАЕМ ИЗВЕСТНЫЕ ---
         if (!toUnbanBlocks.isEmpty()) { TheGameOfLifeMod.BANNED_BLOCKS.removeAll(toUnbanBlocks); TheGameOfLifeMod.UNBANNED_BLOCKS.addAll(toUnbanBlocks); rulesChanged = true; }
         if (!toBanBlocks.isEmpty()) { TheGameOfLifeMod.UNBANNED_BLOCKS.removeAll(toBanBlocks); TheGameOfLifeMod.BANNED_BLOCKS.addAll(toBanBlocks); rulesChanged = true; }
-        if (!toUnbanFilters.isEmpty()) { TheGameOfLifeMod.BANNED_RESET_FILTERS.removeAll(toUnbanFilters); TheGameOfLifeMod.UNBANNED_RESET_FILTERS.addAll(toUnbanFilters); rulesChanged = true; }
-        if (!toBanFilters.isEmpty()) { TheGameOfLifeMod.UNBANNED_RESET_FILTERS.removeAll(toBanFilters); TheGameOfLifeMod.BANNED_RESET_FILTERS.addAll(toBanFilters); rulesChanged = true; }
+        if (!toUnbanFilters.isEmpty()) { bannedFiltersSet.removeAll(toUnbanFilters); unbannedFiltersSet.addAll(toUnbanFilters); rulesChanged = true; }
+        if (!toBanFilters.isEmpty()) { unbannedFiltersSet.removeAll(toBanFilters); bannedFiltersSet.addAll(toBanFilters); rulesChanged = true; }
 
         // --- 4. ЕДИНЫЙ ГЛОБАЛЬНЫЙ СКАНЕР ---
         if (!toScanBlocks.isEmpty() || !toScanFilters.isEmpty()) {
-            ScanResult result = scanServer(player.level().getServer(), toScanBlocks, toScanFilters);
+            ScanResult result = scanServer(server, toScanBlocks, toScanFilters);
 
             // Обрабатываем найденные/не найденные блоки
-            if (!result.foundBlocks.isEmpty()) {
-                TheGameOfLifeMod.BANNED_BLOCKS.addAll(result.foundBlocks);
+            if (!result.foundBlocks().isEmpty()) {
+                TheGameOfLifeMod.BANNED_BLOCKS.addAll(result.foundBlocks());
                 rulesChanged = true;
             }
+
+            // Обрабатываем исключения AIR и BARRIER
+            if (result.foundBlocks().contains(Blocks.AIR)) {
+                TheGameOfLifeMod.BANNED_BLOCKS.remove(net.minecraft.world.level.block.Blocks.BARRIER);
+                rulesChanged = true;
+            }
+            else if (result.foundBlocks().contains(Blocks.BARRIER)) {
+                TheGameOfLifeMod.BANNED_BLOCKS.remove(net.minecraft.world.level.block.Blocks.AIR);
+                rulesChanged = true;
+            }
+
             Set<Block> notFoundBlocks = new java.util.HashSet<>(toScanBlocks);
-            notFoundBlocks.removeAll(result.foundBlocks);
+            notFoundBlocks.removeAll(result.foundBlocks());
             if (!notFoundBlocks.isEmpty()) {
                 TheGameOfLifeMod.UNBANNED_BLOCKS.addAll(notFoundBlocks);
                 rulesChanged = true;
@@ -128,14 +177,14 @@ public class WorldHacker {
             }
 
             // Обрабатываем найденные/не найденные фильтры
-            if (!result.foundFilters.isEmpty()) {
-                TheGameOfLifeMod.BANNED_RESET_FILTERS.addAll(result.foundFilters);
+            if (!result.foundFilters().isEmpty()) {
+                bannedFiltersSet.addAll(result.foundFilters());
                 rulesChanged = true;
             }
             Set<StateFilter> notFoundFilters = new java.util.HashSet<>(toScanFilters);
-            notFoundFilters.removeAll(result.foundFilters);
+            notFoundFilters.removeAll(result.foundFilters());
             if (!notFoundFilters.isEmpty()) {
-                TheGameOfLifeMod.UNBANNED_RESET_FILTERS.addAll(notFoundFilters);
+                unbannedFiltersSet.addAll(notFoundFilters);
                 rulesChanged = true;
                 for (StateFilter filter : notFoundFilters) {
                     System.out.println("Фильтр не найден, добавлен в UNBAN: " + filter.property().getName());
@@ -144,7 +193,7 @@ public class WorldHacker {
         }
 
         // --- 5. ФИНАЛЬНЫЙ ЩЕЛЧОК ---
-        if (rulesChanged) snap();
+        if (rulesChanged) TheGameOfLifeMod.currentRuleVersion++;
     }
 
     // =========================================
@@ -155,7 +204,7 @@ public class WorldHacker {
     // =========================================
     private record ScanResult(Set<Block> foundBlocks, Set<StateFilter> foundFilters) {}
 
-    public static ScanResult scanServer(MinecraftServer server, Set<Block> targetBlocks, Set<StateFilter> targetFilters) {
+    private static ScanResult scanServer(MinecraftServer server, Set<Block> targetBlocks, Set<StateFilter> targetFilters) {
         Set<Block> foundBlocks = new java.util.HashSet<>();
         Set<StateFilter> foundFilters = new java.util.HashSet<>();
 
@@ -165,7 +214,7 @@ public class WorldHacker {
         int viewDist = server.getPlayerList().getViewDistance();
 
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            ServerLevel level = (ServerLevel) p.level();
+            ServerLevel level = p.level();
             ChunkPos center = p.chunkPosition();
 
             for (int x = -viewDist; x <= viewDist; x++) {
@@ -210,30 +259,6 @@ public class WorldHacker {
         return new ScanResult(foundBlocks, foundFilters);
     }
 
-    // Оставляем эти методы для ручной работы с фильтрами (вода и т.д.)
-    public static void banBreakFilters(Set<StateFilter> targets) {
-        TheGameOfLifeMod.UNBANNED_BREAK_FILTERS.removeAll(targets);
-        TheGameOfLifeMod.BANNED_BREAK_FILTERS.addAll(targets);
-    }
-
-    public static void unbanBreakFilters(Set<StateFilter> targets) {
-        TheGameOfLifeMod.BANNED_BREAK_FILTERS.removeAll(targets);
-        TheGameOfLifeMod.UNBANNED_BREAK_FILTERS.addAll(targets);
-    }
-
-    public static void banResetFilters(Set<StateFilter> targets) {
-        TheGameOfLifeMod.UNBANNED_RESET_FILTERS.removeAll(targets);
-        TheGameOfLifeMod.BANNED_RESET_FILTERS.addAll(targets);
-    }
-
-    public static void unbanResetFilters(Set<StateFilter> targets) {
-        TheGameOfLifeMod.BANNED_RESET_FILTERS.removeAll(targets);
-        TheGameOfLifeMod.UNBANNED_RESET_FILTERS.addAll(targets);
-    }
-
-    public static void snap() {
-        TheGameOfLifeMod.currentRuleVersion++;
-    }
 
     // =========================================
     // АСИНХРОННЫЙ КОНВЕЙЕР (Fast Math Version)

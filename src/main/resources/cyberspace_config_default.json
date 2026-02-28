@@ -1,0 +1,183 @@
+{
+  "registry": {
+    "//": "СИСТЕМНЫЕ ТРИГГЕРЫ: Модификаторы поведения",
+    "system_triggers": {
+      "mode_reset": [
+        ["состоян"], ["свойств"], ["стат"], ["сброс"]
+      ],
+      "require_default": [
+        ["дефолт"], ["стандарт"], ["обычн"], ["ваниль"]
+      ]
+    },
+
+    "//": "ГЛОБАЛЬНЫЕ ДЕЙСТВИЯ: Заготовленные хардкод-макросы",
+    "actions": {
+      "all_items": {
+        "entry_points": [ ["все", "предмет"], ["запрет", "вещи"] ]
+      },
+      "clear_inventories": {
+        "entry_points": [ ["инвентар"], ["вещи", "игрок"] ]
+      },
+      "all_entity": {
+        "entry_points": [ ["моб"], ["сущност"], ["ентити"] ]
+      }
+    },
+
+    "//": "КОМПОНЕНТЫ: Точечная работа с Data Components",
+    "components": {
+      "diamond_sword_weapon": {
+        "entry_points": [
+          ["компонент", "алмазн", "меч"],
+          ["удали", "урон", "алмазн"]
+        ],
+        "exit_points": {
+          "component": "minecraft:weapon",
+          "target_item": "minecraft:diamond_sword",
+          "subcomponents": []
+        }
+      },
+      "food_saturation": {
+        "entry_points": [
+          ["насыщен"],
+          ["saturation"]
+        ],
+        "exit_points": {
+          "component": "minecraft:food",
+          "subcomponents": ["saturation"]
+        }
+      }
+    },
+
+    "//": "ПРЕДМЕТЫ: Целые объекты в инвентарях и мире",
+    "items": {
+      "totem": {
+        "entry_points": [
+          ["тотем"]
+        ],
+        "exit_points": {
+          "target_items": ["minecraft:totem_of_undying"]
+        }
+      },
+      "notch_apple": {
+        "entry_points": [
+          ["чарен", "яблок"],
+          ["нотч", "яблок"]
+        ],
+        "exit_points": {
+          "target_items": ["minecraft:enchanted_golden_apple"]
+        }
+      }
+    },
+
+    "//": "БЛОКИ: Физические типы блоков",
+    "blocks": {
+      "furnace": {
+        "entry_points": [
+          ["печк"],
+          ["печь"]
+        ],
+        "exit_points": {
+          "target_blocks": ["minecraft:furnace"]
+        }
+      },
+      "obsidian": {
+        "entry_points": [
+          ["обсидиан"]
+        ],
+        "exit_points": {
+          "target_blocks": ["minecraft:obsidian"]
+        }
+      },
+      "kelp": {
+        "entry_points": [
+          ["вод"]
+        ],
+        "exit_points": {
+          "target_blocks": ["minecraft:kelp"]
+        }
+      },
+      "kelp_plant": {
+        "entry_points": [
+          ["вод"]
+        ],
+        "exit_points": {
+          "target_blocks": ["minecraft:kelp_plant"]
+        }
+      },
+      "seagrass": {
+        "entry_points": [
+          ["вод"]
+        ],
+        "exit_points": {
+          "target_blocks": ["minecraft:seagrass"]
+        }
+      },
+      "tall_seagrass": {
+        "entry_points": [
+          ["вод"]
+        ],
+        "exit_points": {
+          "target_blocks": ["minecraft:tall_seagrass"]
+        }
+      },
+      "water": {
+        "entry_points": [
+          ["вод"]
+        ],
+        "exit_points": {
+          "target_blocks": ["minecraft:water"]
+        }
+      },
+      "dirt": {
+        "entry_points": [
+          ["обсидиан"]
+        ],
+        "exit_points": {
+          "target_blocks": ["minecraft:dirt"]
+        }
+      }
+    },
+
+    "//": "СОСТОЯНИЯ: Глобальные свойства для фильтрации блоков",
+    "blockstates": {
+      "burning": {
+        "entry_points": [
+          ["горящ"], ["горит"], ["зажжен"]
+        ],
+        "exit_points": {
+          "property": "lit",
+          "value": "true"
+        }
+      },
+      "waterlogged": {
+        "entry_points": [
+          ["вод"], ["затоплен"], ["мокр"]
+        ],
+        "exit_points": {
+          "property": "waterlogged",
+          "value": "true"
+        }
+      }
+    },
+
+    "//": "СУЩНОСТИ: Мобы и технические сущности",
+    "entities": {
+      "phantom": {
+        "entry_points": [
+          ["фантом"]
+        ],
+        "exit_points": {
+          "target_entities": ["minecraft:phantom"]
+        }
+      },
+      "creeper": {
+        "entry_points": [
+          ["крипер"]
+        ],
+        "exit_points": {
+          "target_entities": ["minecraft:creeper"]
+        }
+      }
+    }
+  }
+}

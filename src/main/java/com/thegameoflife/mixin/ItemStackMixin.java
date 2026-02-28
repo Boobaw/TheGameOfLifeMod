@@ -2,6 +2,7 @@ package com.thegameoflife.mixin;
 
 import com.thegameoflife.DataHacker;
 import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -15,15 +16,21 @@ public abstract class ItemStackMixin {
     @Shadow public abstract boolean isEmpty();
 
     /**
-     * Исправляем ошибку со скриншота: используем инъекцию в метод 'set'.
-     * Это гарантирует, что как только предмет получает данные (например, из сундука),
-     * мы проверяем его на соответствие правилам.
+     * СТИРАЕМ ДЖЕНЕРИКИ: Используем <?> и Object, чтобы соответствовать байт-коду JVM.
+     * CallbackInfoReturnable тоже типизируем как <Object>.
      */
     @Inject(method = "set", at = @At("HEAD"))
-    private <T> void autoPatchOnSet(DataComponentType<T> type, T value, CallbackInfoReturnable<T> cir) {
+    private void autoPatchOnSet(DataComponentType<?> type, Object value, CallbackInfoReturnable<Object> cir) {
+
+        // 1. ЗАЩИТА ОТ РЕКУРСИИ
+        // Если DataHacker сам записывает свой паспорт в предмет - мы игнорируем этот вызов!
+        if (type == DataComponents.CUSTOM_DATA) {
+            return;
+        }
+
+        // 2. БЫСТРАЯ ПРОВЕРКА
         if (!this.isEmpty()) {
-            // Безусловная проверка правил при любом обновлении данных
-            DataHacker.processItemStack((ItemStack) (Object) this, false);
+            DataHacker.processItemStack((ItemStack) (Object) this, false, false);
         }
     }
 }

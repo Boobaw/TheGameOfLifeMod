@@ -7,6 +7,7 @@ import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -35,6 +36,7 @@ public class ServerLevelMixin {
      * Возвращает TRUE, если сущность нужно полностью уничтожить и запретить её появление.
      * Возвращает FALSE, если сущность безопасна (или мы её безопасно "обезвредили").
      */
+    @Unique
     private boolean handleBannedEntity(Entity entity) {
         // 1. Глобальный бан мобов (Вардены, Зомби и т.д.)
         if (TheGameOfLifeMod.BANNED_ENTITIES.contains(entity.getType())) {
