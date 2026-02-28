@@ -12,7 +12,7 @@ import org.lwjgl.glfw.GLFW;
 
 import java.io.File;
 
-public class TheGameOfLIfeClient implements ClientModInitializer {
+public class TheGameOfLifeClient implements ClientModInitializer {
 
 	private static final AudioRecorderMod recorder = new AudioRecorderMod();
 	private static ChatLogger logger;

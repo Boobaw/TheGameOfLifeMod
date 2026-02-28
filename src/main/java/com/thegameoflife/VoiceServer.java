@@ -9,16 +9,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
@@ -36,8 +33,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
+import static com.thegameoflife.TheGameOfLifeMod.SERVER;
+
 public final class VoiceServer {
-    private static final Logger LOGGER = TheGameOfLIfeMod.LOGGER;
+    private static final Logger LOGGER = TheGameOfLifeMod.LOGGER;
 
     private static final String MODEL_EN =
             "thegameoflife/vosk-model/vosk-model-en-us-0.22";
@@ -200,7 +199,7 @@ public final class VoiceServer {
 
             LOGGER.info("[Voice] Recognition -> EN: '{}' ({:.2f}), RU: '{}' ({:.2f})", en, resEn.confidence(), ru, resRu.confidence());
 
-            String text = "";
+            String text;
             if (!en.isEmpty() && !ru.isEmpty()) {
                 // Выбираем тот вариант, где нейросеть больше уверена (confidence)
                 text = (resEn.confidence() > resRu.confidence()) ? en : ru;
@@ -208,6 +207,8 @@ public final class VoiceServer {
                 text = en;
             } else if (!ru.isEmpty()) {
                 text = ru;
+            } else {
+                text = "";
             }
 
             if (!text.isBlank()) {
@@ -220,10 +221,14 @@ public final class VoiceServer {
 
                         // Проверяем команды вручную, так как системные сообщения не триггерят событие чата
                         String lower = msg.toLowerCase(Locale.ROOT);
-                        for (java.util.Map.Entry<String, Runnable> entry : TheGameOfLIfeMod.COMMAND_MAP.entrySet()) {
-                            if (lower.contains(entry.getKey())) {
-                                entry.getValue().run();
-                                break;
+                        for (Map.Entry<String, Consumer<ServerPlayer>> entry : TheGameOfLifeMod.COMMAND_MAP.entrySet()) {
+                            String[] commandChunks = text.split(",");
+                            for (String rawChunk : commandChunks) {
+                                String chunk = rawChunk.trim().toLowerCase();
+                                if (chunk.isEmpty()) continue;
+
+                                // Отправляем кусок на анализ и исполнение
+                                CommandRouter.processChunk(chunk, player, SERVER);
                             }
                         }
 

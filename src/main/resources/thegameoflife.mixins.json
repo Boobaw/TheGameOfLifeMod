@@ -3,7 +3,10 @@
 	"package": "com.thegameoflife.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"TheGameOfLIfeMixin"
+		"LevelMixin",
+		"ServerLevelMixin",
+		"ItemStackMixin",
+		"FlowingFluidMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
