@@ -7,7 +7,7 @@ public final class ModIds {
     }
 
     public static final Identifier VOICE_CHUNK =
-            Identifier.fromNamespaceAndPath(TheGameOfLIfeMod.MOD_ID, "voice_chunk");
+            Identifier.fromNamespaceAndPath(TheGameOfLifeMod.MOD_ID, "voice_chunk");
     public static final Identifier VOICE_RESULT =
-            Identifier.fromNamespaceAndPath(TheGameOfLIfeMod.MOD_ID, "voice_result");
+            Identifier.fromNamespaceAndPath(TheGameOfLifeMod.MOD_ID, "voice_result");
 }
