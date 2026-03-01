@@ -7,6 +7,18 @@
       ],
       "require_default": [
         ["дефолт"], ["стандарт"], ["обычн"], ["ваниль"]
+      ],
+      "modifier_component": [
+        ["компонент"], ["характерист"], ["component"], ["property"]
+      ],
+      "modifier_entity": [
+        ["ентити"], ["существ"], ["entity"]
+      ],
+      "modifier_item": [
+        ["предмет"], ["item"]
+      ],
+      "modifier_block": [
+        ["блок"], ["block"]
       ]
     },
 
@@ -23,61 +35,17 @@
       }
     },
 
-    "//": "КОМПОНЕНТЫ: Точечная работа с Data Components",
-    "components": {
-      "diamond_sword_weapon": {
-        "entry_points": [
-          ["компонент", "алмазн", "меч"],
-          ["удали", "урон", "алмазн"]
-        ],
-        "exit_points": {
-          "component": "minecraft:weapon",
-          "target_item": "minecraft:diamond_sword",
-          "subcomponents": []
-        }
-      },
-      "food_saturation": {
-        "entry_points": [
-          ["насыщен"],
-          ["saturation"]
-        ],
-        "exit_points": {
-          "component": "minecraft:food",
-          "subcomponents": ["saturation"]
-        }
-      }
-    },
-
-    "//": "ПРЕДМЕТЫ: Целые объекты в инвентарях и мире",
+    "//": "ПРЕДМЕТЫ",
     "items": {
-      "totem": {
-        "entry_points": [
-          ["тотем"]
-        ],
-        "exit_points": {
-          "target_items": ["minecraft:totem_of_undying"]
-        }
-      },
-      "notch_apple": {
-        "entry_points": [
-          ["чарен", "яблок"],
-          ["нотч", "яблок"]
-        ],
-        "exit_points": {
-          "target_items": ["minecraft:enchanted_golden_apple"]
-        }
-      }
-    },
-
-    "//": "БЛОКИ: Физические типы блоков",
-    "blocks": {
       "furnace": {
+        "stt_hints": ["печка", "печь", "плавильня"],
         "entry_points": [
           ["печк"],
           ["печь"]
         ],
         "exit_points": {
-          "target_blocks": ["minecraft:furnace"]
+          "target_block": "minecraft:furnace",
+          "target_item": "minecraft:furnace"
         }
       },
       "obsidian": {
@@ -85,55 +53,66 @@
           ["обсидиан"]
         ],
         "exit_points": {
-          "target_blocks": ["minecraft:obsidian"]
+          "target_block": "minecraft:obsidian",
+          "target_item": "minecraft:obsidian"
         }
       },
-      "kelp": {
+      "diamond_sword": {
+        "stt_hints": ["алмазный меч"],
         "entry_points": [
-          ["вод"]
+          ["алмазн", "меч"]
         ],
         "exit_points": {
-          "target_blocks": ["minecraft:kelp"]
+          "target_item": "minecraft:diamond_sword"
         }
       },
-      "kelp_plant": {
+      "bubble_column": {
         "entry_points": [
-          ["вод"]
+          ["вод"],
+          ["вод"], ["лифт"],
+          ["вод"], ["колонн"]
         ],
         "exit_points": {
-          "target_blocks": ["minecraft:kelp_plant"]
+          "target_block": "minecraft:bubble_column"
+        }
+      }
+    },
+
+    "//": "КОМПОНЕНТЫ: Точечная работа с Data Components",
+    "components": {
+      "food_saturation": {
+        "entry_points": [
+          ["насыщен"],
+          ["saturation"]
+        ],
+        "exit_points": {
+          "component": "minecraft:food",
+          "subcomponents": {
+            "nutrition": null,
+            "saturation": null
+          }
         }
       },
-      "seagrass": {
+      "epic_rarity": {
         "entry_points": [
-          ["вод"]
+          ["эпич", "редкост"]
         ],
         "exit_points": {
-          "target_blocks": ["minecraft:seagrass"]
+          "component": "minecraft:rarity",
+          "subcomponents": {
+            "rarity": "EPIC"
+          }
         }
       },
-      "tall_seagrass": {
+      "common_rarity": {
         "entry_points": [
-          ["вод"]
+          ["обыч", "редкост"]
         ],
         "exit_points": {
-          "target_blocks": ["minecraft:tall_seagrass"]
-        }
-      },
-      "water": {
-        "entry_points": [
-          ["вод"]
-        ],
-        "exit_points": {
-          "target_blocks": ["minecraft:water"]
-        }
-      },
-      "dirt": {
-        "entry_points": [
-          ["обсидиан"]
-        ],
-        "exit_points": {
-          "target_blocks": ["minecraft:dirt"]
+          "component": "minecraft:rarity",
+          "subcomponents": {
+            "rarity": "COMMON"
+          }
         }
       }
     },

@@ -14,6 +14,7 @@ import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Rarity;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -42,20 +43,141 @@ public class DataHacker {
     public static final Set<String> ACTIVE_RULES = ConcurrentHashMap.newKeySet();
 
 
+    public record ModResult<T>(T component, boolean isModified) {}
+
     public record RuleData<T>(
             DataComponentType<T> type,
-            List<String> subcomponentKeys,
+            Map<String, Object> subcomponents,
             Item targetItem,
             boolean requireDefault,
-            boolean isBan // <-- TRUE (сжигаем везде), FALSE (баффаем только экипировку)
+            boolean isBan
     ) {}
 
-    public static final Map<String, Object> ABSURD_VALUES = Map.of(
-            "mining_speed", 0.001f,
-            "nutrition", 0,
-            "consume_seconds", 0.001f,
-            "max_damage", 999999,
-            "canDestroyBlocksInCreative", 0
+    public static final Map<String, Object> ABSURD_VALUES = Map.ofEntries(
+            // ДНО (0, 1, false, COMMON)
+            Map.entry("max_stack_size", 1),
+            Map.entry("damage", 0),
+            Map.entry("max_damage", 1),
+            Map.entry("repair_cost", 0),
+            Map.entry("mining_speed", 0.0f),
+            Map.entry("nutrition", 0),
+            Map.entry("saturation", 0.0f),
+            Map.entry("consume_seconds", 0.0f),
+            Map.entry("minimum_attack_charge", 0.0f),
+            Map.entry("enchantment_glint_override", false),
+            Map.entry("rarity", net.minecraft.world.item.Rarity.COMMON),
+            Map.entry("clear_custom_data", true),
+            Map.entry("use_effects", true),
+            Map.entry("custom_name", true),
+            Map.entry("item_name", true),
+            Map.entry("item_model", true),
+            Map.entry("lore", true),
+            Map.entry("damage_type", true),
+            Map.entry("use_cooldown", 0.0f),
+            Map.entry("enchantments", true),
+            Map.entry("can_place_on", true),
+            Map.entry("can_break", true),
+            Map.entry("attribute_modifiers", true),
+            Map.entry("custom_model_data", true),
+            Map.entry("tooltip_display", true),
+            Map.entry("use_remainder", true),
+            Map.entry("damage_resistant", true),
+            Map.entry("attack_range", 0.0f),           // Нулевая дальность атаки
+            Map.entry("enchantable", 0),               // Предмет невозможно зачаровать
+            Map.entry("damage_per_block", 0),          // Инструмент не наносит урон блоку
+            Map.entry("canDestroyBlocksInCreative", false),
+            Map.entry("weapon", true),
+            Map.entry("equippable", true),
+            Map.entry("repairable", true),
+            Map.entry("glider", true),
+            Map.entry("death_protection", true),
+            Map.entry("blocks_attacks", true),
+            Map.entry("piercing_weapon", true),
+            Map.entry("kinetic_weapon", true),
+            Map.entry("swing_animation", true),
+            Map.entry("stored_enchantments", true),
+            Map.entry("dyed_color", true),
+            Map.entry("potion_duration_scale", 0.0f),  // Зелье действует 0 секунд
+            Map.entry("map_color", true),
+            Map.entry("map_id", true),
+            Map.entry("map_decorations", true),
+            Map.entry("map_post_processing", true),
+            Map.entry("charged_projectiles", true),
+            Map.entry("bundle_contents", true),
+            Map.entry("potion_contents", true),
+            Map.entry("suspicious_stew_effects", true),
+            Map.entry("writable_book_content", true),
+            Map.entry("written_book_content", true),
+            Map.entry("trim", true),
+            Map.entry("debug_stick_state", true),
+            Map.entry("entity_data", true),
+            Map.entry("bucket_entity_data", true),
+            Map.entry("block_entity_data", true),
+            Map.entry("instrument", true),
+            Map.entry("provides_trim_material", true),
+            Map.entry("ominous_bottle_amplifier", true),
+            Map.entry("jukebox_playable", true),
+            Map.entry("provides_banner_patterns", true),
+            Map.entry("recipes", true),
+            Map.entry("lodestone_tracker", true),
+            Map.entry("firework_explosion", true),
+            Map.entry("fireworks", true),
+            Map.entry("profile", true),
+            Map.entry("note_block_sound", true),
+            Map.entry("banner_patterns", true),
+            Map.entry("base_color", true),
+            Map.entry("pot_decorations", true),
+            Map.entry("container", true),
+            Map.entry("block_state", true),
+            Map.entry("bees", true),
+            Map.entry("lock", true),
+            Map.entry("container_loot", true),
+            Map.entry("break_sound", true),
+            Map.entry("villager_variant", true),
+            Map.entry("wolf_variant", true),
+            Map.entry("wolf_sound_variant", true),
+            Map.entry("wolf_collar", true),
+            Map.entry("fox_variant", true),
+            Map.entry("salmon_size", true),
+            Map.entry("parrot_variant", true),
+            Map.entry("tropical_fish_pattern", true),
+            Map.entry("tropical_fish_base_color", true),
+            Map.entry("tropical_fish_pattern_color", true),
+            Map.entry("mooshroom_variant", true),
+            Map.entry("rabbit_variant", true),
+            Map.entry("pig_variant", true),
+            Map.entry("cow_variant", true),
+            Map.entry("chicken_variant", true),
+            Map.entry("zombie_nautilus_variant", true),
+            Map.entry("frog_variant", true),
+            Map.entry("horse_variant", true),
+            Map.entry("painting_variant", true),
+            Map.entry("llama_variant", true),
+            Map.entry("axolotl_variant", true),
+            Map.entry("cat_variant", true),
+            Map.entry("cat_collar", true),
+            Map.entry("sheep_color", true),
+            Map.entry("shulker_color", true)
+    );
+
+    public static final Map<String, Object> INVERTED_VALUES = Map.ofEntries(
+            // ПОТОЛОК (9999, true, EPIC)
+            Map.entry("max_stack_size", 99),
+            Map.entry("damage", 9999),
+            Map.entry("max_damage", 999999),
+            Map.entry("repair_cost", 9999),
+            Map.entry("mining_speed", 9999.0f),
+            Map.entry("nutrition", 20),
+            Map.entry("saturation", 20.0f),
+            Map.entry("consume_seconds", 99.0f),
+            Map.entry("minimum_attack_charge", 10.0f),
+            Map.entry("enchantment_glint_override", true),
+            Map.entry("rarity", net.minecraft.world.item.Rarity.EPIC),
+            Map.entry("use_cooldown", 9999.0f),
+            Map.entry("attack_range", 99.0f),           // Бьет за горизонт
+            Map.entry("enchantable", 99),              // Безумный шанс крутых чар
+            Map.entry("damage_per_block", 9999),
+            Map.entry("potion_duration_scale", 99.0f) // Зелье действует целую вечность
     );
 
     // =========================================
@@ -67,6 +189,17 @@ public class DataHacker {
             ACTIVE_RULES.remove(ruleId);
             System.out.println("[DataHacker] Правило " + ruleId + " ОТКЛЮЧЕНО. Восстанавливаем ванильный баланс.");
         } else {
+            // --- УБИЙЦА КОНКУРЕНТОВ ---
+            // Если включается новое правило для компонента (например, rarity),
+            // мы ищем старое активное правило для этого же компонента и вырубаем его.
+            for (String activeId : new java.util.HashSet<>(ACTIVE_RULES)) {
+                RuleData<?> activeRule = REGISTERED_RULES.get(activeId);
+                if (activeRule != null && activeRule.type() == templateRule.type()) {
+                    System.out.println("[DataHacker] Конфликт компонентов! Отключаем старое правило: " + activeId);
+                    // Рекурсивно вызываем этот же метод, чтобы он чисто отработал фазу отключения
+                    toggleRule(server, activeId, activeRule);
+                }
+            }
             // ФАЗА ВКЛЮЧЕНИЯ
             // Запускаем разведчика из твоей старой логики!
             boolean foundInWorld = checkComponentExists(server, templateRule);
@@ -74,7 +207,7 @@ public class DataHacker {
             // Пересобираем правило, записывая в него результаты разведки
             RuleData<T> finalRule = new RuleData<>(
                     templateRule.type(),
-                    templateRule.subcomponentKeys(),
+                    templateRule.subcomponents(),
                     templateRule.targetItem(),
                     templateRule.requireDefault(),
                     foundInWorld // Записываем решение: БАН или БАФФ
@@ -244,71 +377,6 @@ public class DataHacker {
         return changed;
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> T modifySubcomponents(T existingComponent, List<String> absurdKeys) {
-        if (existingComponent == null || absurdKeys == null || absurdKeys.isEmpty()) return existingComponent;
-
-        // --- ИНСТРУМЕНТЫ (Tool) ---
-        if (existingComponent instanceof Tool tool) {
-            float speed = tool.defaultMiningSpeed();
-            int damagePerBlock = tool.damagePerBlock();
-            boolean canDestroyBlocksInCreative = tool.canDestroyBlocksInCreative();
-
-            // ЦИКЛ: Применяем все запрошенные изменения за один раз
-            for (String key : absurdKeys) {
-                Object val = ABSURD_VALUES.get(key);
-                if (val == null) continue;
-
-                if (key.equals("mining_speed")) speed = (Float) val;
-                if (key.equals("damage_per_block")) damagePerBlock = (Integer) val;
-                if (key.equals("canDestroyBlocksInCreative")) canDestroyBlocksInCreative = (Boolean) val;
-            }
-            return (T) new Tool(tool.rules(), speed, damagePerBlock, canDestroyBlocksInCreative);
-        }
-
-        // --- СВОЙСТВА ЕДЫ (FoodProperties) ---
-        if (existingComponent instanceof FoodProperties food) {
-            int nutrition = food.nutrition();
-            float saturation = food.saturation();
-
-            for (String key : absurdKeys) {
-                Object val = ABSURD_VALUES.get(key);
-                if (val == null) continue;
-
-                if (key.equals("nutrition")) nutrition = (Integer) val;
-                if (key.equals("saturation")) saturation = (Float) val;
-            }
-
-            FoodProperties.Builder builder = new FoodProperties.Builder()
-                    .nutrition(nutrition)
-                    .saturationModifier(saturation);
-            if (food.canAlwaysEat()) builder.alwaysEdible();
-
-            return (T) builder.build();
-        }
-
-        // --- ПОЕДАНИЕ (Consumable) ---
-        if (existingComponent instanceof Consumable consumable) {
-            float consumeSeconds = consumable.consumeSeconds();
-
-            for (String key : absurdKeys) {
-                Object val = ABSURD_VALUES.get(key);
-                if (val == null) continue;
-
-                if (key.equals("consume_seconds")) consumeSeconds = (Float) val;
-            }
-
-            return (T) Consumable.builder()
-                    .consumeSeconds(consumeSeconds)
-                    .animation(consumable.animation())
-                    .sound(consumable.sound())
-                    .hasConsumeParticles(consumable.hasConsumeParticles())
-                    .build();
-        }
-
-        return existingComponent;
-    }
-
     private static <T> boolean applyRule(ItemStack stack, CompoundTag tag, String ruleId, RuleData<?> rawRule, boolean isActive, boolean inPlayerInventory, boolean isEquipped) {
         @SuppressWarnings("unchecked")
         RuleData<T> rule = (RuleData<T>) rawRule;
@@ -328,31 +396,71 @@ public class DataHacker {
                 }
 
                 // ================= ВЫПОЛНЕНИЕ =================
-                if (rule.subcomponentKeys() == null || rule.subcomponentKeys().isEmpty()) {
+                if (rule.subcomponents() == null || rule.subcomponents().isEmpty()) {
                     stack.remove(rule.type());
                     tag.putBoolean(hackedTag, true);
                     changed = true;
                 } else {
-                    T hackedComponent = modifySubcomponents(currentComponent, rule.subcomponentKeys());
-                    if (hackedComponent != null && !hackedComponent.equals(currentComponent)) {
-                        stack.set(rule.type(), hackedComponent);
+                    // ПРОТОКОЛ ПОЛНОГО УНИЧТОЖЕНИЯ
+                    if (rule.subcomponents().containsKey("NUKE_COMPONENT")) {
+                        stack.remove(rule.type());
                         tag.putBoolean(hackedTag, true);
+
+                        // Срываем чужие бирки
+                        for (Map.Entry<String, RuleData<?>> otherRule : REGISTERED_RULES.entrySet()) {
+                            if (!otherRule.getKey().equals(ruleId) && otherRule.getValue().type() == rule.type()) {
+                                tag.remove("hacked_" + otherRule.getKey());
+                            }
+                        }
+                        return true; // Завершаем работу, компонент удален!
+                    }
+
+                    // Обычная логика, если это не ядерный удар
+                    ModResult<T> result = modifySubcomponents(currentComponent, rule.subcomponents());
+
+                    // Если скальпель сказал, что он что-то изменил
+                    if (result.isModified()) {
+                        if (result.component() == null) {
+                            // Если вернулся null (например, для маркера Unit) — удаляем компонент целиком
+                            stack.remove(rule.type());
+                        } else {
+                            // Иначе сохраняем измененный объект
+                            stack.set(rule.type(), result.component());
+                        }
+
+                        tag.putBoolean(hackedTag, true);
+
+                        for (Map.Entry<String, RuleData<?>> otherRule : REGISTERED_RULES.entrySet()) {
+                            if (!otherRule.getKey().equals(ruleId) && otherRule.getValue().type() == rule.type()) {
+                                tag.remove("hacked_" + otherRule.getKey());
+                            }
+                        }
                         changed = true;
                     }
                 }
             }
         } else {
-            // ================= ОТКАТ (Работает идеально для всего) =================
+            // ================= ОТКАТ (С синхронизацией общих компонентов) =================
             if (tag.contains(hackedTag)) {
-                // И для снятия баффов с брони, и для возврата урона мечам в сундуках
-                // мы просто берем чистый исходник предмета из игры
+                // Возвращаем предмету его ванильный компонент
                 T vanillaComponent = stack.getItem().components().get(rule.type());
                 if (vanillaComponent != null) {
                     stack.set(rule.type(), vanillaComponent);
                 } else {
                     stack.remove(rule.type());
                 }
+
+                // Удаляем тег текущего (отключенного) правила
                 tag.remove(hackedTag);
+
+//                // МАГИЯ: Срываем бирки с других правил, которые работают с этим же компонентом (например, Rarity).
+//                // Это заставит их заново переоценить этот предмет в следующем тике!
+//                for (Map.Entry<String, RuleData<?>> otherRule : REGISTERED_RULES.entrySet()) {
+//                    if (ACTIVE_RULES.contains(otherRule.getKey()) && otherRule.getValue().type() == rule.type()) {
+//                        tag.remove("hacked_" + otherRule.getKey());
+//                    }
+//                }
+
                 changed = true;
             }
         }
@@ -384,5 +492,401 @@ public class DataHacker {
         }
 
         return true; // Предмет прошел все активные фильтры
+    }
+
+    // =========================================
+    // УНИВЕРСАЛЬНЫЕ КАЧЕЛИ (Anti-Absurd Logic)
+    // =========================================
+    private static Object applySeesaw(Object currentValue, String key, Object targetVal) {
+        Object absurdVal = ABSURD_VALUES.get(key);
+        Object invertedVal = INVERTED_VALUES.get(key);
+
+        // 1. Безусловный бан
+        if (targetVal == null) return absurdVal;
+
+        // 2. Если текущее значение совпадает с целью
+        if (checkValueMatch(currentValue, targetVal)) {
+            // МАГИЯ: Если цель УЖЕ абсурд и есть инверсия — выдаем инверсию
+            if (invertedVal != null && checkValueMatch(absurdVal, targetVal)) {
+                return invertedVal;
+            }
+            // Иначе бьем об пол
+            return absurdVal;
+        }
+
+        // 3. Если не совпало — возвращаем оригинал (без изменений)
+        return currentValue;
+    }
+
+    // =========================================
+    // СКАЛЬПЕЛЬ (С оптимизированным возвратом)
+    // =========================================
+    @SuppressWarnings("unchecked")
+    private static <T> ModResult<T> modifySubcomponents(T existingComponent, Map<String, Object> modifiers) {
+        if (existingComponent == null || modifiers == null || modifiers.isEmpty()) {
+            return new ModResult<>(existingComponent, false);
+        }
+
+        // ==========================================
+        // 1. ПРИМИТИВЫ (С качелями applySeesaw)
+        // ==========================================
+        if (existingComponent instanceof Integer currentInt) {
+            for (Map.Entry<String, Object> entry : modifiers.entrySet()) {
+                String key = entry.getKey();
+                // MAX_STACK_SIZE, MAX_DAMAGE, DAMAGE
+                if (key.equals("max_stack_size") || key.equals("damage") || key.equals("max_damage") || key.equals("repair_cost")) {
+                    Object res = applySeesaw(currentInt, key, entry.getValue());
+                    if (!res.equals(currentInt)) return new ModResult<>((T) res, true);
+                }
+            }
+        }
+        if (existingComponent instanceof Float currentFloat) {
+            if (modifiers.containsKey("minimum_attack_charge")) {
+                Object res = applySeesaw(currentFloat, "minimum_attack_charge", modifiers.get("minimum_attack_charge"));
+                if (!res.equals(currentFloat)) return new ModResult<>((T) res, true);
+            }
+            // Множитель длительности зелий
+            if (modifiers.containsKey("potion_duration_scale")) {
+                Object res = applySeesaw(currentFloat, "potion_duration_scale", modifiers.get("potion_duration_scale"));
+                if (!res.equals(currentFloat)) return new ModResult<>((T) res, true);
+            }
+        }
+        if (existingComponent instanceof Boolean currentBool) {
+            if (modifiers.containsKey("enchantment_glint_override")) {
+                Object res = applySeesaw(currentBool, "enchantment_glint_override", modifiers.get("enchantment_glint_override"));
+                if (!res.equals(currentBool)) return new ModResult<>((T) res, true);
+            }
+        }
+
+
+        // ==========================================
+        // 2. ПУСТЫЕ МАРКЕРЫ И УДАЛЯЕМЫЕ КОМПОНЕНТЫ
+        // (Возвращаем null для полного удаления из NBT)
+        // ==========================================
+
+        if (existingComponent instanceof net.minecraft.util.Unit && (modifiers.containsKey("unbreakable") || modifiers.containsKey("creative_slot_lock") || modifiers.containsKey("intangible_projectile") || modifiers.containsKey("glider"))) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.network.chat.Component && (modifiers.containsKey("custom_name") || modifiers.containsKey("item_name"))) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.ItemLore && modifiers.containsKey("lore")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.CustomData && (modifiers.containsKey("clear_custom_data") || modifiers.containsKey("bucket_entity_data"))) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.UseEffects && modifiers.containsKey("use_effects")) return new ModResult<>(null, true);
+        if ((existingComponent.getClass().getName().contains("EitherHolder") || existingComponent.getClass().getName().contains("DamageType")) && modifiers.containsKey("damage_type")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.enchantment.ItemEnchantments && (modifiers.containsKey("enchantments") || modifiers.containsKey("stored_enchantments"))) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.AdventureModePredicate && (modifiers.containsKey("can_place_on") || modifiers.containsKey("can_break"))) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.ItemAttributeModifiers && modifiers.containsKey("attribute_modifiers")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.CustomModelData && modifiers.containsKey("custom_model_data")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.TooltipDisplay && modifiers.containsKey("tooltip_display")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.UseRemainder && modifiers.containsKey("use_remainder")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.DamageResistant && modifiers.containsKey("damage_resistant")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.DyedItemColor && modifiers.containsKey("dyed_color")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.SwingAnimation && modifiers.containsKey("swing_animation")) return new ModResult<>(null, true);
+
+        // КОНТЕЙНЕРЫ (Мешки, зелья, супы, заряженные арбалеты)
+        if (existingComponent instanceof net.minecraft.world.item.component.BundleContents && modifiers.containsKey("bundle_contents")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.alchemy.PotionContents && modifiers.containsKey("potion_contents")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.SuspiciousStewEffects && modifiers.containsKey("suspicious_stew_effects")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.ChargedProjectiles && modifiers.containsKey("charged_projectiles")) return new ModResult<>(null, true);
+
+        // КНИГИ (Перо и Написанные)
+        if (existingComponent instanceof net.minecraft.world.item.component.WritableBookContent && modifiers.containsKey("writable_book_content")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.WrittenBookContent && modifiers.containsKey("written_book_content")) return new ModResult<>(null, true);
+
+        // КАРТЫ (Удаляем ID, цвета, маркеры и эффекты)
+        if (existingComponent instanceof net.minecraft.world.item.component.MapItemColor && modifiers.containsKey("map_color")) return new ModResult<>(null, true);
+        if (existingComponent instanceof   net.minecraft.world.level.saveddata.maps.MapId && modifiers.containsKey("map_id")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.MapDecorations && modifiers.containsKey("map_decorations")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.MapPostProcessing && modifiers.containsKey("map_post_processing")) return new ModResult<>(null, true);
+
+        // ВИЗУАЛ И УТИЛИТЫ (Шаблоны кузнеца, броня, рог)
+        if (existingComponent instanceof net.minecraft.world.item.equipment.trim.ArmorTrim && modifiers.containsKey("trim")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.ProvidesTrimMaterial && modifiers.containsKey("provides_trim_material")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.InstrumentComponent && modifiers.containsKey("instrument")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.DebugStickState && modifiers.containsKey("debug_stick_state")) return new ModResult<>(null, true);
+
+        // ДАННЫЕ СУЩНОСТЕЙ И БЛОКОВ (Яйца призыва, шалкеры в инвентаре)
+        // Используем проверку по имени класса, так как TypedEntityData - дженерик
+        if (existingComponent.getClass().getName().contains("TypedEntityData")) {
+            if (modifiers.containsKey("entity_data") || modifiers.containsKey("block_entity_data")) {
+                return new ModResult<>(null, true);
+            }
+        }
+        // КОНТЕЙНЕРЫ, УЛЬИ И ЛУТ (Очистка шалкеров, пчел и генерации лута)
+        if (existingComponent instanceof net.minecraft.world.item.component.ItemContainerContents && modifiers.containsKey("container")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.SeededContainerLoot && modifiers.containsKey("container_loot")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.BlockItemStateProperties && modifiers.containsKey("block_state")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.Bees && modifiers.containsKey("bees")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.LockCode && modifiers.containsKey("lock")) return new ModResult<>(null, true);
+
+        // ЗВУКИ И МУЗЫКА (Ломаем пластинки, убираем зловещие бутылочки)
+        if (existingComponent instanceof net.minecraft.world.item.JukeboxPlayable && modifiers.containsKey("jukebox_playable")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.OminousBottleAmplifier && modifiers.containsKey("ominous_bottle_amplifier")) return new ModResult<>(null, true);
+
+        // ДЕКОРАЦИИ И ВИЗУАЛ (Фейерверки, баннеры, горшки, головы)
+        if (existingComponent instanceof net.minecraft.world.item.component.FireworkExplosion && modifiers.containsKey("firework_explosion")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.Fireworks && modifiers.containsKey("fireworks")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.ResolvableProfile && modifiers.containsKey("profile")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.level.block.entity.BannerPatternLayers && modifiers.containsKey("banner_patterns")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.level.block.entity.PotDecorations && modifiers.containsKey("pot_decorations")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.DyeColor && modifiers.containsKey("base_color")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.world.item.component.LodestoneTracker && modifiers.containsKey("lodestone_tracker")) return new ModResult<>(null, true);
+
+        // ДЖЕНЕРИКИ (Яйца призыва, рецепты, звуки поломки)
+        if (existingComponent instanceof java.util.List && modifiers.containsKey("recipes")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.tags.TagKey && modifiers.containsKey("provides_banner_patterns")) return new ModResult<>(null, true);
+        if (existingComponent instanceof net.minecraft.core.Holder) {
+            if (modifiers.containsKey("break_sound") ||
+                    modifiers.containsKey("villager_variant") ||
+                    modifiers.containsKey("wolf_variant") ||
+                    modifiers.containsKey("wolf_sound_variant")) {
+                return new ModResult<>(null, true);
+            }
+        }
+        // ЦВЕТА (Ошейники, овцы, шалкеры, рыбы, базовые цвета)
+        if (existingComponent instanceof net.minecraft.world.item.DyeColor) {
+            if (modifiers.containsKey("base_color") ||
+                    modifiers.containsKey("wolf_collar") ||
+                    modifiers.containsKey("cat_collar") ||
+                    modifiers.containsKey("sheep_color") ||
+                    modifiers.containsKey("shulker_color") ||
+                    modifiers.containsKey("tropical_fish_base_color") ||
+                    modifiers.containsKey("tropical_fish_pattern_color")) {
+                return new ModResult<>(null, true);
+            }
+        }
+
+        // ХОЛДЕРЫ ВАРИАНТОВ (Свиньи, коровы, лягушки, картины, коты, волки и т.д.)
+        if (existingComponent instanceof net.minecraft.core.Holder) {
+            if (modifiers.containsKey("break_sound") ||
+                    modifiers.containsKey("villager_variant") ||
+                    modifiers.containsKey("wolf_variant") ||
+                    modifiers.containsKey("wolf_sound_variant") ||
+                    modifiers.containsKey("pig_variant") ||
+                    modifiers.containsKey("cow_variant") ||
+                    modifiers.containsKey("frog_variant") ||
+                    modifiers.containsKey("painting_variant") ||
+                    modifiers.containsKey("cat_variant")) {
+                return new ModResult<>(null, true);
+            }
+        }
+
+        // EITHER ХОЛДЕРЫ (Курицы, зомби-наутилусы, типы урона)
+        if (existingComponent.getClass().getName().contains("EitherHolder")) {
+            if (modifiers.containsKey("damage_type") ||
+                    modifiers.containsKey("chicken_variant") ||
+                    modifiers.containsKey("zombie_nautilus_variant")) {
+                return new ModResult<>(null, true);
+            }
+        }
+
+        // ENUM ВАРИАНТЫ (Лисы, лососи, попугаи, кролики, лошади, аксолотли и т.д.)
+        // Все эти Variant классы наследуются от Enum, поэтому мы ловим их одной проверкой!
+        if (existingComponent instanceof Enum<?>) {
+            if (modifiers.containsKey("fox_variant") ||
+                    modifiers.containsKey("salmon_size") ||
+                    modifiers.containsKey("parrot_variant") ||
+                    modifiers.containsKey("tropical_fish_pattern") ||
+                    modifiers.containsKey("mooshroom_variant") ||
+                    modifiers.containsKey("rabbit_variant") ||
+                    modifiers.containsKey("horse_variant") ||
+                    modifiers.containsKey("llama_variant") ||
+                    modifiers.containsKey("axolotl_variant")) {
+                return new ModResult<>(null, true);
+            }
+        }
+
+        // ==========================================
+        // 3. ОДНОРАЗОВАЯ ЗАМЕНА ЗНАЧЕНИЯ
+        // ==========================================
+
+        // ITEM_MODEL (Подменяем модель на воздух, чтобы сделать предмет невидимым)
+        if (existingComponent instanceof net.minecraft.resources.Identifier) {
+            if (modifiers.containsKey("item_model") || modifiers.containsKey("tooltip_style")) {
+                return new ModResult<>((T) net.minecraft.resources.Identifier.parse("minecraft:air"), true);
+            }
+        }
+        // EQUIPPABLE (Сносим модель и звук брони, оставляем только слот, чтобы игра не крашнулась)
+        if (existingComponent instanceof net.minecraft.world.item.equipment.Equippable equippable && modifiers.containsKey("equippable")) {
+            return new ModResult<>((T) net.minecraft.world.item.equipment.Equippable.builder(equippable.slot()).build(), true);
+        }
+        // REPAIRABLE (Запрещаем чинить предмет, передав пустой список материалов)
+        if (existingComponent instanceof net.minecraft.world.item.enchantment.Repairable && modifiers.containsKey("repairable")) {
+            return new ModResult<>((T) new net.minecraft.world.item.enchantment.Repairable(net.minecraft.core.HolderSet.empty()), true);
+        }
+        // DEATH_PROTECTION (Тотем бессмертия без эффектов восстановления)
+        if (existingComponent instanceof net.minecraft.world.item.component.DeathProtection && modifiers.containsKey("death_protection")) {
+            return new ModResult<>((T) new net.minecraft.world.item.component.DeathProtection(java.util.List.of()), true);
+        }
+        // BLOCKS_ATTACKS (Сломанный щит, не блокирует урон)
+        if (existingComponent instanceof net.minecraft.world.item.component.BlocksAttacks blocksAttacks && modifiers.containsKey("blocks_attacks")) {
+            return new ModResult<>((T) new net.minecraft.world.item.component.BlocksAttacks(
+                    0.0f,                               // float f (вероятно, задержка перед блоком)
+                    0.0f,                               // float g (угол блокирования)
+                    java.util.List.of(),                // пустой список поглощения урона (щит ничего не впитывает)
+                    blocksAttacks.itemDamage(), // берем функцию поломки из оригинала, чтобы IDE не ругалась
+                    java.util.Optional.empty(),         // без особых тегов пробивания
+                    java.util.Optional.empty(),         // без звука успешного блока
+                    java.util.Optional.empty()          // без звука отключения щита топором
+            ), true);
+        }
+        // WEAPON (Убираем базовый урон оружия)
+        if (existingComponent instanceof net.minecraft.world.item.component.Weapon && modifiers.containsKey("weapon")) {
+            return new ModResult<>((T) new net.minecraft.world.item.component.Weapon(0, 0.0f), true);
+        }
+        // PIERCING_WEAPON (Ломаем трезубец)
+        if (existingComponent instanceof net.minecraft.world.item.component.PiercingWeapon && modifiers.containsKey("piercing_weapon")) {
+            return new ModResult<>((T) new net.minecraft.world.item.component.PiercingWeapon(
+                    false,                      // boolean b1 (флаг пробивания/возврата)
+                    false,                      // boolean b2 (второй флаг)
+                    java.util.Optional.empty(), // Звук 1
+                    java.util.Optional.empty()  // Звук 2
+            ), true);
+        }
+        // KINETIC_WEAPON (Ломаем лук/арбалет)
+        if (existingComponent instanceof net.minecraft.world.item.component.KineticWeapon && modifiers.containsKey("kinetic_weapon")) {
+            return new ModResult<>((T) new net.minecraft.world.item.component.KineticWeapon(
+                    0,                          // int i (что-то вроде времени натяжения)
+                    0,                          // int j (базовое количество стрел)
+                    java.util.Optional.empty(), // Condition 1
+                    java.util.Optional.empty(), // Condition 2
+                    java.util.Optional.empty(), // Condition 3
+                    0.0f,                       // float f (множитель скорости)
+                    0.0f,                       // float g (разброс)
+                    java.util.Optional.empty(), // Sound 1
+                    java.util.Optional.empty()  // Sound 2
+            ), true);
+        }
+        // IDENTIFIER (Модели и звуки)
+        if (existingComponent instanceof net.minecraft.resources.Identifier) {
+            // Если банят звук головы на нотном блоке - удаляем его
+            if (modifiers.containsKey("note_block_sound")) {
+                return new ModResult<>(null, true);
+            }
+            // Подменяем модель на воздух
+            if (modifiers.containsKey("item_model") || modifiers.containsKey("tooltip_style")) {
+                return new ModResult<>((T) net.minecraft.resources.Identifier.parse("minecraft:air"), true);
+            }
+        }
+
+        // ==========================================
+        // 4. СЛОЖНЫЕ ОБЪЕКТЫ С КАЧЕЛЯМИ
+        // ==========================================
+
+        // TOOL (Инструменты: Кирки, топоры, лопаты)
+        if (existingComponent instanceof net.minecraft.world.item.component.Tool tool) {
+            float speed = tool.defaultMiningSpeed();
+            int damagePerBlock = tool.damagePerBlock();
+            boolean canDestroyBlocksInCreative = tool.canDestroyBlocksInCreative();
+            boolean isModified = false;
+
+            if (modifiers.containsKey("mining_speed")) {
+                Object res = applySeesaw(speed, "mining_speed", modifiers.get("mining_speed"));
+                if (!res.equals(speed)) { speed = (Float) res; isModified = true; }
+            }
+            if (modifiers.containsKey("damage_per_block")) {
+                Object res = applySeesaw(damagePerBlock, "damage_per_block", modifiers.get("damage_per_block"));
+                if (!res.equals(damagePerBlock)) { damagePerBlock = (Integer) res; isModified = true; }
+            }
+            if (modifiers.containsKey("canDestroyBlocksInCreative")) {
+                Object res = applySeesaw(canDestroyBlocksInCreative, "canDestroyBlocksInCreative", modifiers.get("canDestroyBlocksInCreative"));
+                if (!res.equals(canDestroyBlocksInCreative)) { canDestroyBlocksInCreative = (Boolean) res; isModified = true; }
+            }
+            if (isModified) {
+                return new ModResult<>((T) new net.minecraft.world.item.component.Tool(tool.rules(), speed, damagePerBlock, canDestroyBlocksInCreative), true);
+            }
+        }
+
+        // ENCHANTABLE (Уровень зачаровываемости)
+        if (existingComponent instanceof net.minecraft.world.item.enchantment.Enchantable enchantable && modifiers.containsKey("enchantable")) {
+            int val = enchantable.value();
+            Object res = applySeesaw(val, "enchantable", modifiers.get("enchantable"));
+            if (!res.equals(val)) {
+                return new ModResult<>((T) new net.minecraft.world.item.enchantment.Enchantable((Integer) res), true);
+            }
+        }
+
+        // ATTACK_RANGE (Дальность атаки)
+        if (existingComponent instanceof net.minecraft.world.item.component.AttackRange range && modifiers.containsKey("attack_range")) {
+            // Приводим double от maxRange() к float
+            float val = (float) range.maxRange();
+            Object res = applySeesaw(val, "attack_range", modifiers.get("attack_range"));
+
+            if (!res.equals(val)) {
+                float newRange = (Float) res;
+                // Бьем наверняка: передаем новое значение во все 6 параметров (f, g, h, i, j, k)
+                return new ModResult<>((T) new net.minecraft.world.item.component.AttackRange(newRange, newRange, newRange, newRange, newRange, newRange), true);
+            }
+        }
+
+        // CONSUMABLE (Время поедания / использования)
+        if (existingComponent instanceof net.minecraft.world.item.component.Consumable consumable) {
+            if (modifiers.containsKey("consume_seconds")) {
+                float consumeSeconds = consumable.consumeSeconds();
+                Object res = applySeesaw(consumeSeconds, "consume_seconds", modifiers.get("consume_seconds"));
+
+                if (!res.equals(consumeSeconds)) {
+                    // Пересобираем компонент с новым временем, но старыми партиклами и звуками
+                    net.minecraft.world.item.component.Consumable newConsumable = net.minecraft.world.item.component.Consumable.builder()
+                            .consumeSeconds((Float) res)
+                            .animation(consumable.animation())
+                            .sound(consumable.sound())
+                            .hasConsumeParticles(consumable.hasConsumeParticles())
+                            .build();
+                    return new ModResult<>((T) newConsumable, true);
+                }
+            }
+        }
+
+        // USE_COOLDOWN (Перезарядка после использования, например, эндер-жемчуга)
+        if (existingComponent instanceof net.minecraft.world.item.component.UseCooldown cooldownComp) {
+            if (modifiers.containsKey("use_cooldown")) {
+                float seconds = cooldownComp.seconds();
+                Object res = applySeesaw(seconds, "use_cooldown", modifiers.get("use_cooldown"));
+
+                if (!res.equals(seconds)) {
+                    return new ModResult<>((T) new net.minecraft.world.item.component.UseCooldown((Float) res), true);
+                }
+            }
+        }
+
+        // RARITY
+        if (existingComponent instanceof net.minecraft.world.item.Rarity currentRarity) {
+            if (modifiers.containsKey("rarity")) {
+                Object res = applySeesaw(currentRarity, "rarity", modifiers.get("rarity"));
+                if (!res.equals(currentRarity)) return new ModResult<>((T) res, true);
+            }
+        }
+
+        // Возврат по умолчанию, если ничего не подошло
+        return new ModResult<>(existingComponent, false);
+    }
+
+
+
+
+    private static boolean checkValueMatch(Object currentVal, Object targetVal) {
+        // Если таргет null — значит баним безусловно
+        if (targetVal == null) return true;
+
+        // 1. Сравнение целых чисел
+        if (currentVal instanceof Integer currentInt && targetVal instanceof Integer targetInt) {
+            return currentInt.intValue() == targetInt.intValue();
+        }
+
+        // 2. Сравнение дробей (с учетом погрешности)
+        if (currentVal instanceof Float currentFloat && targetVal instanceof Float targetFloat) {
+            return Math.abs(currentFloat - targetFloat) < 0.001f;
+        }
+
+        // 2.5 Сравнение Double (специально для AttackRange)
+        if (currentVal instanceof Double currentDouble && targetVal instanceof Double targetDouble) {
+            return Math.abs(currentDouble - targetDouble) < 0.001;
+        }
+
+        // 3. Сравнение логики (Boolean)
+        if (currentVal instanceof Boolean currentBool && targetVal instanceof Boolean targetBool) {
+            return currentBool.booleanValue() == targetBool.booleanValue();
+        }
+
+        // 4. Fallback (для Enum, строк и прочего) - ИСПРАВЛЕНО
+        return String.valueOf(currentVal).equalsIgnoreCase(String.valueOf(targetVal));
     }
 }

@@ -76,9 +76,6 @@ public class TheGameOfLifeMod implements ModInitializer {
     public static final Set<net.minecraft.world.item.Item> BANNED_ITEMS = ConcurrentHashMap.newKeySet();
     public static final Set<net.minecraft.world.item.Item> UNBANNED_ITEMS = ConcurrentHashMap.newKeySet();
 
-    // Универсальный список активных правил (хранит строковые ID, например "rule_food", "rule_sharpness")
-    public static final java.util.Set<String> BANNED_RULES = java.util.concurrent.ConcurrentHashMap.newKeySet();
-
     // Эпоха и Память чанков остаются без изменений
     public static int currentRuleVersion = 0;
     public static final ConcurrentHashMap<Long, Integer> CHUNK_VERSIONS = new ConcurrentHashMap<>();
