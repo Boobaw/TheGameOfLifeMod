@@ -36,12 +36,15 @@ public class GlobalRadar {
 
                 // Передаем сущность каждому хакеру.
                 // Внутри они сами за миллисекунду проверят свои эпохи и решат, нужно ли что-то делать.
+                // Баним сами энтити
                 EntityHacker.processEntity(entity);
 
+                // Баним предметы у энтити
                 if (!entity.isRemoved()) {
                     ItemHacker.processEntity(entity);
                 }
 
+                // Баним компоненты у предметов у энтити
                 if (!entity.isRemoved()) {
                     DataHacker.processEntity(entity);
                 }

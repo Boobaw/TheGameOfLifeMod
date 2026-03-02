@@ -38,7 +38,7 @@
     "//": "ПРЕДМЕТЫ",
     "items": {
       "furnace": {
-        "stt_hints": ["печка", "печь", "плавильня"],
+        "stt_hints": ["печка", "печь"],
         "entry_points": [
           ["печк"],
           ["печь"]
@@ -112,6 +112,93 @@
           "component": "minecraft:rarity",
           "subcomponents": {
             "rarity": "COMMON"
+          }
+        }
+      },
+      "enchantment_sharpness": {
+        "entry_points": [
+          ["острот"],
+          ["урон", "меч"]
+        ],
+        "exit_points": {
+          "component": "minecraft:enchantments",
+          "subcomponents": {
+            "minecraft:sharpness": null
+          }
+        }
+      },
+      "enchantment_knockback": {
+        "entry_points": [
+          ["отдач"],
+          ["откидыван"],
+          ["удар", "космос"]
+        ],
+        "exit_points": {
+          "component": "minecraft:enchantments",
+          "subcomponents": {
+            "minecraft:knockback": null
+          }
+        }
+      },
+      "enchantment_mending": {
+        "entry_points": [
+          ["починк"],
+          ["ремонт"],
+          ["вечн", "жизн"]
+        ],
+        "exit_points": {
+          "component": "minecraft:enchantments",
+          "subcomponents": {
+            "minecraft:mending": null
+          }
+        }
+      },
+      "enchantment_wind_burst": {
+        "entry_points": [
+          ["порыв", "ветр"],
+          ["взрыв", "булав"]
+        ],
+        "exit_points": {
+          "component": "minecraft:enchantments",
+          "subcomponents": {
+            "minecraft:wind_burst": null
+          }
+        }
+      },
+      "unbreakable_item": {
+        "entry_points": [
+          ["неразрушим"],
+          ["бесконечн", "прочност"]
+        ],
+        "exit_points": {
+          "component": "minecraft:unbreakable",
+          "subcomponents": {
+            "unbreakable": null
+          }
+        }
+      },
+      "glint_override": {
+        "entry_points": [
+          ["свечен"],
+          ["перелив"],
+          ["магическ", "блеск"]
+        ],
+        "exit_points": {
+          "component": "minecraft:enchantment_glint_override",
+          "subcomponents": {
+            "enchantment_glint_override": null
+          }
+        }
+      },
+      "max_stack_size": {
+        "entry_points": [
+          ["стак"],
+          ["размер", "стак"]
+        ],
+        "exit_points": {
+          "component": "minecraft:max_stack_size",
+          "subcomponents": {
+            "max_stack_size": null
           }
         }
       }

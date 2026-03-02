@@ -15,6 +15,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -79,8 +80,8 @@ public class WorldHacker {
     // УНИВЕРСАЛЬНЫЙ ПЕРЕКЛЮЧАТЕЛЬ (Блоки + Фильтры)
     // =========================================
     // =========================================
-// УНИВЕРСАЛЬНЫЙ ПЕРЕКЛЮЧАТЕЛЬ (Блоки + Фильтры)
-// =========================================
+    // УНИВЕРСАЛЬНЫЙ ПЕРЕКЛЮЧАТЕЛЬ (Блоки + Фильтры)
+    // =========================================
     public static void toggle(MinecraftServer server, Set<Block> targetBlocks, Set<StateFilter> targetFilters, boolean isReset) {
         boolean rulesChanged = false;
 
@@ -209,9 +210,9 @@ public class WorldHacker {
     // =========================================
     // ЕДИНЫЙ СУПЕР-СКАНЕР (Ищет и блоки, и фильтры за один проход)
     // =========================================
-    private record ScanResult(Set<Block> foundBlocks, Set<StateFilter> foundFilters) {}
+    public record ScanResult(Set<Block> foundBlocks, Set<StateFilter> foundFilters) {}
 
-    private static ScanResult scanServer(MinecraftServer server, Set<Block> targetBlocks, Set<StateFilter> targetFilters) {
+    public static ScanResult scanServer(MinecraftServer server, Set<Block> targetBlocks, Set<StateFilter> targetFilters) {
         // Проверка на наличие исключений в списке
         // Сюда не должно попадать одновременно и Air и Barrier
         boolean hasTargetAir = false;
@@ -614,5 +615,44 @@ public class WorldHacker {
             }
             return colIdx >= 256;
         }
+    }
+
+
+    // 2. Исполнение приговора Роутера
+    public static void applyState(MinecraftServer server, Set<Block> targetBlocks, Set<StateFilter> targetFilters, boolean isReset, boolean shouldBan) {
+        boolean rulesChanged = false;
+        Set<StateFilter> bannedFiltersSet = isReset ? TheGameOfLifeMod.BANNED_RESET_FILTERS : TheGameOfLifeMod.BANNED_BREAK_FILTERS;
+        Set<StateFilter> unbannedFiltersSet = isReset ? TheGameOfLifeMod.UNBANNED_RESET_FILTERS : TheGameOfLifeMod.UNBANNED_BREAK_FILTERS;
+
+        if (targetBlocks != null && !targetBlocks.isEmpty()) {
+            if (shouldBan) {
+                TheGameOfLifeMod.UNBANNED_BLOCKS.removeAll(targetBlocks);
+                TheGameOfLifeMod.BANNED_BLOCKS.addAll(targetBlocks);
+            } else {
+                TheGameOfLifeMod.BANNED_BLOCKS.removeAll(targetBlocks);
+                TheGameOfLifeMod.UNBANNED_BLOCKS.addAll(targetBlocks);
+            }
+            rulesChanged = true;
+        }
+
+        if (targetFilters != null && !targetFilters.isEmpty()) {
+            if (shouldBan) {
+                unbannedFiltersSet.removeAll(targetFilters);
+                bannedFiltersSet.addAll(targetFilters);
+            } else {
+                bannedFiltersSet.removeAll(targetFilters);
+                unbannedFiltersSet.addAll(targetFilters);
+            }
+            rulesChanged = true;
+        }
+
+        // Обновляем состояние Воздуха/Барьера
+        IS_AIR_INVERTED = TheGameOfLifeMod.BANNED_BLOCKS.contains(Blocks.AIR);
+        if (IS_AIR_INVERTED || TheGameOfLifeMod.BANNED_BLOCKS.contains(Blocks.BARRIER)) {
+            IS_AIR_ONCE_TOGGLED = true;
+        }
+
+        // Пингуем конвейер радара на перерисовку чанков
+        if (rulesChanged) TheGameOfLifeMod.currentRuleVersion++;
     }
 }

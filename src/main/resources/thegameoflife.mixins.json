@@ -1,17 +1,18 @@
 {
-	"required": true,
-	"package": "com.thegameoflife.mixin",
-	"compatibilityLevel": "JAVA_21",
-	"mixins": [
-		"LevelMixin",
-		"ServerLevelMixin",
-		"ItemStackMixin",
-		"FlowingFluidMixin"
-	],
-	"injectors": {
-		"defaultRequire": 1
-	},
-	"overwrites": {
-		"requireAnnotations": true
+  "required": true,
+  "package": "com.thegameoflife.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "FlowingFluidMixin",
+    "InventoryBypassMixin",
+    "ItemStackMixin",
+    "LevelMixin",
+    "ServerLevelMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
 	}
 }

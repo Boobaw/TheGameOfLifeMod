@@ -14,7 +14,6 @@ import java.util.*;
 
 import static com.thegameoflife.DataHacker.toggleRule;
 import static com.thegameoflife.EntityHacker.toggleEntity;
-import static com.thegameoflife.ItemHacker.toggleItem;
 
 public class CommandRouter {
 
@@ -22,82 +21,90 @@ public class CommandRouter {
         System.out.println("[Router] Анализ команды: " + chunk);
 
         // ==========================================
-        // ШАГ 1: ЧТЕНИЕ ГЛОБАЛЬНЫХ ФЛАГОВ (Модификаторов)
+        // ШАГ 1: ЧТЕНИЕ ГЛОБАЛЬНЫХ ФЛАГОВ
         // ==========================================
         boolean isReset = CyberSpaceParser.hasSystemTrigger(chunk, "mode_reset");
         boolean reqDefault = CyberSpaceParser.hasSystemTrigger(chunk, "require_default");
         boolean isCompMod = CyberSpaceParser.hasSystemTrigger(chunk, "modifier_component");
         boolean isItemMod = CyberSpaceParser.hasSystemTrigger(chunk, "modifier_item");
+        boolean isBlockMod = CyberSpaceParser.hasSystemTrigger(chunk, "modifier_block");
 
-        // Коллекции для пакетной отправки в Хакеры
         Set<Block> blocksToToggle = new HashSet<>();
         Set<WorldHacker.StateFilter> filtersToToggle = new HashSet<>();
         Set<Item> itemsToToggle = new HashSet<>();
         Set<EntityType<?>> targetEntities = new HashSet<>();
 
         // ==========================================
-        // ШАГ 2: ПРОВЕРКА МАКРОСОВ (Глобальные действия)
+        // ШАГ 2: МАКРОСЫ
         // ==========================================
         for (Map.Entry<String, List<List<String>>> action : CyberSpaceParser.ACTIONS.entrySet()) {
             if (CyberSpaceParser.checkMatch(chunk, action.getValue())) {
-                String macroId = action.getKey();
-                System.out.println("[Router] Запуск макроса: " + macroId);
-                // Здесь ты можешь вызывать свои хардкод-методы. Например:
-                // if (macroId.equals("clear_inventories")) PlayerHacker.clearAll(server);
-                // if (macroId.equals("all_items")) ItemHacker.banAll(server);
+                System.out.println("[Router] Запуск макроса: " + action.getKey());
             }
         }
 
         // ==========================================
-        // ШАГ 3: УНИВЕРСАЛЬНЫЕ ПРЕДМЕТЫ И "ЯДЕРНЫЙ УДАР"
+        // ШАГ 3: ПРЕДМЕТЫ И КВАНТОВЫЕ СЛЕПКИ
         // ==========================================
         for (CyberSpaceParser.ItemContext itemCtx : CyberSpaceParser.ITEM_RULES) {
             if (CyberSpaceParser.checkMatch(chunk, itemCtx.triggers())) {
                 Item targetItem = itemCtx.target();
 
                 if (isCompMod) {
-                    // ПРОТОКОЛ "ЯДЕРНЫЙ УДАР" (Снос всех компонентов предмета)
-                    System.out.println("[Router] Ядерный ALL активирован для: " + BuiltInRegistries.ITEM.getKey(targetItem));
+                    System.out.println("[Router] Запуск Квантового Слепка для: " + BuiltInRegistries.ITEM.getKey(targetItem));
 
-                    Map<String, Object> nukeMap = new HashMap<>();
-                    nukeMap.put("NUKE_COMPONENT", true); // Секретный ключ для DataHacker
+                    // Создаем ОДНО правило, которое хранит в себе донора целиком.
+                    // DataHacker.applyRule сам разберет его на компоненты и решит, кого банить!
+                    String ruleId = "snapshot_" + BuiltInRegistries.ITEM.getKey(targetItem).getPath();
 
-                    for (DataComponentType<?> compType : targetItem.components().keySet()) {
-                        // Создаем уникальный ID правила (напр: diamond_sword_weapon)
-                        String ruleId = BuiltInRegistries.ITEM.getKey(targetItem).getPath() + "_" + BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(compType).getPath();
+                    DataHacker.RuleData<?> snapshotRule = new DataHacker.RuleData<>(
+                            null,          // type: null (applyRule сам переберет все компоненты донора)
+                            null,          // subcomponents: null
+                            targetItem,    // targetItem: наш донор (Алмазный меч)
+                            null,          // targetValue: null (applyRule возьмет значения из чертежа)
+                            reqDefault,    // reqDefault: решает, будет ли это только Вирус или Вирус + Кувалда
+                            false          // isBan: заглушка (toggleRule сам решит, бан это или бафф)
+                    );
 
-                        DataHacker.RuleData<?> rule = new DataHacker.RuleData<>(compType, nukeMap, targetItem, reqDefault, true);
-                        toggleRule(server, ruleId, rule);
-                    }
-                } else {
-                    // Обычный бан предмета (если не сказано "компонент")
+                    toggleRule(server, ruleId, snapshotRule);
+
+                } else if (!isBlockMod) {
+                    // Обычный бан предмета (если не сказано "блок")
                     itemsToToggle.add(targetItem);
                 }
             }
         }
 
         // ==========================================
-        // ШАГ 4: ТОЧЕЧНЫЕ КОМПОНЕНТЫ (Из блока components)
+        // ШАГ 4: ТОЧЕЧНЫЕ КОМПОНЕНТЫ
         // ==========================================
         for (CyberSpaceParser.ComponentContext compCtx : CyberSpaceParser.COMPONENT_RULES) {
             if (CyberSpaceParser.checkMatch(chunk, compCtx.triggers())) {
-                // Если компонент точечный (напр. "эпичная редкость"), он применяется глобально (targetItem = null)
-                DataHacker.RuleData<?> rule = new DataHacker.RuleData<>(compCtx.type(), compCtx.subcomponents(), null, reqDefault, true);
                 System.out.println("[Router] Точечный компонент: " + BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(compCtx.type()));
+
+                // Строгие 6 параметров для точечного глобального правила
+                DataHacker.RuleData<?> rule = new DataHacker.RuleData<>(
+                        compCtx.type(),
+                        compCtx.subcomponents(),
+                        null,       // targetItem: нет донора, правило глобальное
+                        null,       // targetValue: нет конкретного значения
+                        reqDefault,
+                        false       // isBan: заглушка
+                );
+
                 toggleRule(server, compCtx.ruleName(), rule);
             }
         }
 
         // ==========================================
-        // ШАГ 5: БЛОКИ И ИХ СОСТОЯНИЯ В МИРЕ
+        // ШАГ 5: БЛОКИ В МИРЕ
         // ==========================================
-        // Блоки мы трогаем ТОЛЬКО если игрок не уточнил, что работает с предметом или компонентом
         if (!isCompMod && !isItemMod) {
+            // ВАЖНО: Если игрок сказал "предмет обсидиана", мы игнорируем блоки
             for (CyberSpaceParser.BlockContext blockCtx : CyberSpaceParser.BLOCK_RULES) {
                 if (CyberSpaceParser.checkMatch(chunk, blockCtx.triggers())) {
                     boolean hasActiveStateFilter = false;
 
-                    // Проверяем, не наложил ли игрок фильтр (например, "горящая")
                     for (CyberSpaceParser.BlockStateContext stateCtx : CyberSpaceParser.BLOCKSTATE_RULES) {
                         if (CyberSpaceParser.checkMatch(chunk, stateCtx.triggers())) {
                             WorldHacker.StateFilter filter = buildStateFilter(blockCtx.target(), stateCtx.property(), stateCtx.value());
@@ -108,7 +115,6 @@ public class CommandRouter {
                         }
                     }
 
-                    // Если фильтров нет и это не команда сброса состояний — баним блок целиком
                     if (!hasActiveStateFilter && !isReset) {
                         blocksToToggle.add(blockCtx.target());
                     }
@@ -117,7 +123,7 @@ public class CommandRouter {
         }
 
         // ==========================================
-        // ШАГ 6: СУЩНОСТИ (Мобы)
+        // ШАГ 6: СУЩНОСТИ
         // ==========================================
         for (CyberSpaceParser.EntityContext entityCtx : CyberSpaceParser.ENTITY_RULES) {
             if (CyberSpaceParser.checkMatch(chunk, entityCtx.triggers())) {
@@ -126,22 +132,102 @@ public class CommandRouter {
         }
 
         // ==========================================
-        // ФИНАЛЬНЫЙ ЗАЛП: Отправка собранных данных в движки
+        // ФИНАЛЬНЫЙ ЗАЛП: Умная гибридная логика
         // ==========================================
-        if (!blocksToToggle.isEmpty() || !filtersToToggle.isEmpty()) {
-            System.out.println("[Router] WorldHacker: Блоков=" + blocksToToggle.size() + ", Фильтров=" + filtersToToggle.size());
-            WorldHacker.toggle(server, blocksToToggle, filtersToToggle, isReset);
-        }
-
-        if (!itemsToToggle.isEmpty()) {
-            System.out.println("[Router] ItemHacker: Предметов=" + itemsToToggle.size());
-            toggleItem(server, itemsToToggle);
-        }
+        executeToggleLogic(server, itemsToToggle, blocksToToggle, filtersToToggle, isReset, isItemMod, isBlockMod, isCompMod);
 
         if (!targetEntities.isEmpty()) {
-            System.out.println("[Router] EntityHacker: Сущностей=" + targetEntities.size());
-            toggleEntity(server, targetEntities);
+            EntityHacker.toggleEntity(server, targetEntities);
         }
+    }
+
+    // ==========================================
+    // ЛОГИКА СИНХРОНИЗАЦИИ И РАССИНХРОНА
+    // ==========================================
+    private static void executeToggleLogic(MinecraftServer server, Set<Item> itemsToToggle, Set<Block> blocksToToggle, Set<WorldHacker.StateFilter> filtersToToggle, boolean isReset, boolean isItemMod, boolean isBlockMod, boolean isCompMod) {
+
+        // 1. Собираем списки того, что СЕЙЧАС ЛЕГАЛЬНО (unbanned), чтобы отсканировать это
+        Set<Item> itemsToScan = new HashSet<>();
+        for (Item i : itemsToToggle) if (!TheGameOfLifeMod.BANNED_ITEMS.contains(i)) itemsToScan.add(i);
+
+        Set<Block> blocksToScan = new HashSet<>();
+        for (Block b : blocksToToggle) if (!TheGameOfLifeMod.BANNED_BLOCKS.contains(b)) blocksToScan.add(b);
+
+        // 2. Выполняем разведку ТОЛЬКО для легальных объектов
+        Set<Item> foundItems = new HashSet<>();
+        if (!itemsToScan.isEmpty()) {
+            System.out.println("[Router] Разведка инвентарей...");
+            foundItems = ItemHacker.scanAndCollect(server, itemsToScan);
+        }
+
+        WorldHacker.ScanResult scanResult = new WorldHacker.ScanResult(new HashSet<>(), new HashSet<>());
+        if (!blocksToScan.isEmpty() || !filtersToToggle.isEmpty()) {
+            System.out.println("[Router] Разведка чанков...");
+            scanResult = WorldHacker.scanServer(server, blocksToScan, filtersToToggle);
+        }
+
+        // 3. Подготовка итоговых списков
+        Set<Item> finalItemsToBan = new HashSet<>();
+        Set<Item> finalItemsToUnban = new HashSet<>();
+        Set<Block> finalBlocksToBan = new HashSet<>();
+        Set<Block> finalBlocksToUnban = new HashSet<>();
+
+        // Проверяем условия для СИНХРОНИЗАЦИИ:
+        // Нет модификаторов + Запрос содержит и блок и предмет + Оба объекта сейчас полностью легальны
+        boolean hasNoModifiers = !isItemMod && !isBlockMod && !isCompMod;
+        boolean bothPresent = !itemsToToggle.isEmpty() && !blocksToToggle.isEmpty();
+        boolean allAreUnbanned = itemsToScan.size() == itemsToToggle.size() && blocksToScan.size() == blocksToToggle.size();
+
+        if (hasNoModifiers && bothPresent && allAreUnbanned) {
+            System.out.println("[Router] Режим: СИНХРОНИЗАЦИЯ (Оба объекта легальны)");
+            boolean foundAnywhere = !foundItems.isEmpty() || !scanResult.foundBlocks().isEmpty();
+
+            if (foundAnywhere) {
+                System.out.println("[Router] Найдено в мире. БАНИМ И БЛОК И ПРЕДМЕТ.");
+                finalItemsToBan.addAll(itemsToToggle);
+                finalBlocksToBan.addAll(blocksToToggle);
+            } else {
+                System.out.println("[Router] Ничего не найдено. РАЗБАНИВАЕМ (Выдаем стак).");
+                finalItemsToUnban.addAll(itemsToToggle);
+                finalBlocksToUnban.addAll(blocksToToggle);
+            }
+        } else {
+            System.out.println("[Router] Режим: НЕЗАВИСИМЫЙ (Точечный запрос или есть рассинхрон)");
+
+            // Обрабатываем предметы
+            for (Item i : itemsToToggle) {
+                if (TheGameOfLifeMod.BANNED_ITEMS.contains(i)) {
+                    finalItemsToUnban.add(i); // Был в бане -> разбан
+                } else {
+                    if (foundItems.contains(i)) finalItemsToBan.add(i); // Легален и найден -> бан
+                    else finalItemsToUnban.add(i); // Легален, но не найден -> разбан (выдаст стак)
+                }
+            }
+
+            // Обрабатываем блоки
+            for (Block b : blocksToToggle) {
+                if (TheGameOfLifeMod.BANNED_BLOCKS.contains(b)) {
+                    finalBlocksToUnban.add(b); // Был в бане -> разбан
+                } else {
+                    if (scanResult.foundBlocks().contains(b)) finalBlocksToBan.add(b);
+                    else finalBlocksToUnban.add(b);
+                }
+            }
+        }
+
+        // 4. Исполнение приговора
+        if (!finalItemsToBan.isEmpty()) {
+            ItemHacker.applyState(server, finalItemsToBan, true, false);
+        }
+
+        if (!finalItemsToUnban.isEmpty()) {
+            // Халява разрешена ТОЛЬКО если мы не разбаниваем блоки параллельно
+            boolean allowFallback = finalBlocksToUnban.isEmpty();
+            ItemHacker.applyState(server, finalItemsToUnban, false, allowFallback);
+        }
+
+        if (!finalBlocksToBan.isEmpty()) WorldHacker.applyState(server, finalBlocksToBan, filtersToToggle, isReset, true);
+        if (!finalBlocksToUnban.isEmpty()) WorldHacker.applyState(server, finalBlocksToUnban, new HashSet<>(), isReset, false);
     }
 
     private static WorldHacker.StateFilter buildStateFilter(Block block, String propName, String propValue) {

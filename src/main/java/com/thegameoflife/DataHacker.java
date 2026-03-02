@@ -19,6 +19,7 @@ import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.item.enchantment.Enchantments;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.food.FoodProperties;
@@ -40,7 +41,7 @@ public class DataHacker {
     public static int DATA_EPOCH = 0;
 
     public static final Map<String, RuleData<?>> REGISTERED_RULES = new ConcurrentHashMap<>();
-    public static final Set<String> ACTIVE_RULES = ConcurrentHashMap.newKeySet();
+    public static final java.util.concurrent.CopyOnWriteArrayList<String> ACTIVE_RULES = new java.util.concurrent.CopyOnWriteArrayList<>();
 
 
     public record ModResult<T>(T component, boolean isModified) {}
@@ -49,6 +50,7 @@ public class DataHacker {
             DataComponentType<T> type,
             Map<String, Object> subcomponents,
             Item targetItem,
+            Object targetValue,
             boolean requireDefault,
             boolean isBan
     ) {}
@@ -185,46 +187,113 @@ public class DataHacker {
     // =========================================
     public static <T> void toggleRule(MinecraftServer server, String ruleId, RuleData<T> templateRule) {
         if (ACTIVE_RULES.contains(ruleId)) {
-            // ФАЗА ОТКЛЮЧЕНИЯ (Откат Бана или Баффа)
             ACTIVE_RULES.remove(ruleId);
-            System.out.println("[DataHacker] Правило " + ruleId + " ОТКЛЮЧЕНО. Восстанавливаем ванильный баланс.");
-        } else {
-            // --- УБИЙЦА КОНКУРЕНТОВ ---
-            // Если включается новое правило для компонента (например, rarity),
-            // мы ищем старое активное правило для этого же компонента и вырубаем его.
-            for (String activeId : new java.util.HashSet<>(ACTIVE_RULES)) {
-                RuleData<?> activeRule = REGISTERED_RULES.get(activeId);
-                if (activeRule != null && activeRule.type() == templateRule.type()) {
-                    System.out.println("[DataHacker] Конфликт компонентов! Отключаем старое правило: " + activeId);
-                    // Рекурсивно вызываем этот же метод, чтобы он чисто отработал фазу отключения
-                    toggleRule(server, activeId, activeRule);
+            System.out.println("[DataHacker] Анбан! Накладываем компоненты на надетые вещи.");
+
+            // ЕДИНОРАЗОВЫЙ СЛЕПОК НА ЭКИПИРОВКУ ПРИ АНБАНЕ
+            RuleData<?> rule = REGISTERED_RULES.get(ruleId);
+            if (rule != null && rule.targetItem() != null) {
+                for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+                    boolean inventoryChanged = false; // Флаг для обновления инвентаря
+
+                    for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
+                        boolean isEquipped = (i == p.getInventory().getSelectedSlot()) || (i >= 36);
+                        ItemStack stack = p.getInventory().getItem(i);
+
+                        if (isEquipped && !stack.isEmpty()) {
+                            for (var typedComp : rule.targetItem().components()) {
+                                stack.set((DataComponentType) typedComp.type(), typedComp.value());
+                            }
+
+                            CustomData customData = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
+                            CompoundTag tag = customData.copyTag();
+
+                            // ==========================================
+                            // ВОТ СЮДА ВСТАВЛЯЕМ РАБОТУ С ТЕГАМИ:
+                            tag.remove("hacked_" + ruleId); // 1. Срываем старое клеймо Вируса
+                            tag.putBoolean("buffed_" + ruleId, true); // 2. Вешаем клеймо Баффа
+                            // ==========================================
+
+                            markCyberSpaced(stack);
+                            stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag)); // Сохраняем NBT
+                            inventoryChanged = true;
+                        }
+                    }
+
+                    // 2. СИНХРОНИЗИРУЕМ ИНВЕНТАРЬ (убивает баг с "дюпом" шлема)
+                    if (inventoryChanged) {
+                        p.inventoryMenu.broadcastChanges();
+                    }
                 }
             }
+        } else {
             // ФАЗА ВКЛЮЧЕНИЯ
-            // Запускаем разведчика из твоей старой логики!
             boolean foundInWorld = checkComponentExists(server, templateRule);
 
-            // Пересобираем правило, записывая в него результаты разведки
+            // Пересобираем правило (6 параметров)
             RuleData<T> finalRule = new RuleData<>(
                     templateRule.type(),
                     templateRule.subcomponents(),
                     templateRule.targetItem(),
+                    templateRule.targetValue(),
                     templateRule.requireDefault(),
                     foundInWorld // Записываем решение: БАН или БАФФ
             );
 
             REGISTERED_RULES.put(ruleId, finalRule);
             ACTIVE_RULES.add(ruleId);
-
-            if (foundInWorld) {
-                System.out.println("[DataHacker] " + ruleId + " (БАН): Найдено в мире. Сжигаем отовсюду.");
-            } else {
-                System.out.println("[DataHacker] " + ruleId + " (БАФФ): Не найдено. Накладываем на экипировку.");
-            }
         }
-
         // Сигнал радарам перепроверить всё
         DATA_EPOCH++;
+    }
+
+    // =========================================
+    // ЛОКАТОР СОВПАДЕНИЙ (Облегченная версия для Разведчика)
+    // =========================================
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static boolean isMatch(ItemStack stack, RuleData<?> rawRule) {
+        if (stack.isEmpty()) return false;
+
+        // --- СЦЕНАРИЙ А: Квантовый Слепок (Предмет) ---
+        if (rawRule.targetItem() != null) {
+
+            // 1. КУВАЛДА: Если !requireDefault и мы нашли донора - сразу БАН (даже если он модифицирован)
+            if (!rawRule.requireDefault() && stack.is(rawRule.targetItem())) {
+                return true;
+            }
+
+            // 2. ВИРУСНЫЙ ПОИСК: Проверяем, есть ли на предмете хотя бы один ванильный компонент донора
+            for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
+                if (!stack.has(compType)) continue;
+
+                Object currentComponent = stack.get(compType);
+                Object defaultDonorComponent = rawRule.targetItem().components().get(compType);
+
+                // Если нашли точное совпадение ванильного слепка с текущим предметом - БАН
+                if (defaultDonorComponent != null && currentComponent.equals(defaultDonorComponent)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        // --- СЦЕНАРИЙ Б: Точечное правило (Шаг 4 Роутера) ---
+        else if (rawRule.type() != null) {
+            DataComponentType type = rawRule.type();
+            if (!stack.has(type)) return false;
+
+            Object currentComponent = stack.get(type);
+
+            if (rawRule.targetValue() != null) {
+                return currentComponent.equals(rawRule.targetValue());
+            } else if (rawRule.requireDefault()) {
+                Object defaultComponent = stack.getItem().components().get(type);
+                return defaultComponent != null && currentComponent.equals(defaultComponent);
+            }
+
+            return true; // Глобальный бан компонента
+        }
+
+        return false;
     }
 
     // =========================================
@@ -298,6 +367,7 @@ public class DataHacker {
     }
 
     public static void processBlockEntity(BlockEntity be) {
+        if (REGISTERED_RULES.isEmpty()) return;
         if (be instanceof Container container) {
             boolean changed = false;
             for (int i = 0; i < container.getContainerSize(); i++) {
@@ -309,6 +379,7 @@ public class DataHacker {
 
     public static void processEntity(Entity e) {
         if (e instanceof ServerPlayer) return;
+        if (REGISTERED_RULES.isEmpty()) return;
 
         if (e instanceof ItemEntity item) {
             processItemStack(item.getItem(), false, false);
@@ -322,11 +393,11 @@ public class DataHacker {
     }
 
     // =========================================
-// ХИРУРГИЧЕСКИЙ СТОЛ (Ядро DataHacker)
-// =========================================
+    // ХИРУРГИЧЕСКИЙ СТОЛ (Ядро DataHacker)
+    // =========================================
     public static boolean isProcessing = false;
 
-    // Метод теперь снова строго требует флаги инвентаря и экипировки
+
     public static boolean processItemStack(ItemStack stack, boolean inPlayerInventory, boolean isEquipped) {
         if (stack.isEmpty() || isProcessing) return false;
 
@@ -334,6 +405,7 @@ public class DataHacker {
         CompoundTag tag = customData.copyTag();
 
         // Сверка часов: Если предмет живет в текущей эпохе - не трогаем его
+        // (Используем обычный getInt, так как в CompoundTag он возвращает 0, если ключа нет)
         int itemEpoch = tag.getInt("datahacker_epoch").orElse(0);
         if (itemEpoch == DATA_EPOCH) return false;
 
@@ -341,34 +413,52 @@ public class DataHacker {
         boolean changed = false;
 
         try {
-            // Прогоняем предмет через все зарегистрированные правила
+            // ==========================================
+            // ФАЗА 1: ОЧИСТКА (Откат отключенных правил)
+            // ==========================================
+            // Прогоняем только те правила, которые мы выключили (их нет в ACTIVE_RULES)
             for (Map.Entry<String, RuleData<?>> entry : REGISTERED_RULES.entrySet()) {
-                try {
-                    // Вызываем applyRule, пробрасывая в него inPlayerInventory и isEquipped
-                    changed |= applyRule(
-                            stack,
-                            tag,
-                            entry.getKey(),
-                            entry.getValue(),
-                            ACTIVE_RULES.contains(entry.getKey()),
-                            inPlayerInventory,
-                            isEquipped
-                    );
-                } catch (Exception ex) {
-                    // Тихо гасим ошибки отдельного правила, чтобы не прерывать цикл
+                if (!ACTIVE_RULES.contains(entry.getKey())) {
+                    try {
+                        changed |= applyRule(
+                                stack, tag, entry.getKey(), entry.getValue(),
+                                false, // isActive = false запускает блок ОТКАТА в applyRule
+                                inPlayerInventory, isEquipped
+                        );
+                    } catch (Exception ex) {
+                        // Тихо гасим ошибки, чтобы один кривой компонент не убил всю очистку
+                    }
+                }
+            }
+
+            // ==========================================
+            // ФАЗА 2: НАКАТ (Применение активных правил)
+            // ==========================================
+            // Теперь накатываем активные правила поверх чистого листа
+            for (String activeId : ACTIVE_RULES) {
+                RuleData<?> rule = REGISTERED_RULES.get(activeId);
+                if (rule != null) {
+                    try {
+                        changed |= applyRule(
+                                stack, tag, activeId, rule,
+                                true, // isActive = true запускает блок БАНА/БАФФА
+                                inPlayerInventory, isEquipped
+                        );
+                    } catch (Exception ex) {
+                        // Тихо гасим ошибки
+                    }
                 }
             }
 
             // Штампуем новую эпоху в паспорт предмета
             tag.putInt("datahacker_epoch", DATA_EPOCH);
-            if (tag.isEmpty()) {
-                stack.remove(DataComponents.CUSTOM_DATA);
-            } else {
-                stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-            }
 
-            // Возвращаем true, если NBT изменился (даже если только обновилась эпоха)
-            if (!changed) changed = true;
+            // Сохраняем NBT
+            stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+
+            // Возвращаем true, чтобы инвентарь синхронизировался с клиентом.
+            // Эпоха обновилась в любом случае, так что предмет изменился.
+            changed = true;
 
         } finally {
             isProcessing = false;
@@ -377,90 +467,114 @@ public class DataHacker {
         return changed;
     }
 
-    private static <T> boolean applyRule(ItemStack stack, CompoundTag tag, String ruleId, RuleData<?> rawRule, boolean isActive, boolean inPlayerInventory, boolean isEquipped) {
-        @SuppressWarnings("unchecked")
-        RuleData<T> rule = (RuleData<T>) rawRule;
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static boolean applyRule(ItemStack stack, CompoundTag tag, String ruleId, RuleData<?> rawRule, boolean isActive, boolean inPlayerInventory, boolean isEquipped) {
         boolean changed = false;
         String hackedTag = "hacked_" + ruleId;
 
         if (isActive) {
-            if (!isMatch(stack, rule)) return false;
+            // ЕСЛИ МЫ СНОВА БАНИМ ПРАВИЛО - СТИРАЕМ БАФФ С ЭКИПИРОВКИ
+            String buffedTag = "buffed_" + ruleId;
+            if (tag.contains(buffedTag)) {
+                if (rawRule.targetItem() != null) {
+                    for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
+                        Object vanillaComponent = stack.getItem().components().get(compType);
+                        if (vanillaComponent != null) stack.set((DataComponentType<Object>) compType, vanillaComponent);
+                        else stack.remove(compType);
+                    }
+                }
+                unmarkCyberSpaced(stack); // <--- СТИРАЕМ КЛЕЙМО БАФФА
+                tag.remove(buffedTag);
+                changed = true;
+            }
+            // Если бирка уже висит - пропускаем (мы уже применили это правило)
+            if (tag.contains(hackedTag)) return false;
 
-            if (stack.has(rule.type()) && !tag.contains(hackedTag)) {
-                T currentComponent = stack.get(rule.type());
+            // ==========================================
+            // БАН (Выжигание компонентов)
+            // ==========================================
+            if (rawRule.isBan()) {
 
-                // Проверка на "девственность" компонента
-                if (rule.requireDefault() && rule.targetItem() != null) {
-                    T defaultComponent = rule.targetItem().components().get(rule.type());
-                    if (defaultComponent == null || !currentComponent.equals(defaultComponent)) return false;
+                // --- СЦЕНАРИЙ А: Правило от Предмета ---
+                if (rawRule.targetItem() != null) {
+                    for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
+                        if (!stack.has(compType)) continue;
+
+                        Object currentComponent = stack.get(compType);
+                        Object defaultDonorComponent = rawRule.targetItem().components().get(compType);
+                        boolean match = false;
+
+                        if (defaultDonorComponent != null && currentComponent.equals(defaultDonorComponent)) {
+                            match = true; // Вирус
+                        } else if (!rawRule.requireDefault() && stack.is(rawRule.targetItem())) {
+                            match = true; // Кувалда
+                        }
+
+                        if (match) {
+                            if (rawRule.subcomponents() == null || rawRule.subcomponents().isEmpty()) {
+                                stack.remove(compType);
+                                changed = true;
+                            } else {
+                                // ИСПОЛЬЗУЕМ БЕЗОПАСНЫЙ МОСТ К ТВОЕМУ СКАЛЬПЕЛЮ
+                                changed |= applyModifierSafe(stack, compType, rawRule.subcomponents());
+                            }
+                        }
+                    }
+                }
+                // --- СЦЕНАРИЙ Б: Точечное правило ---
+                else if (rawRule.type() != null) {
+                    DataComponentType type = rawRule.type();
+                    if (!stack.has(type)) return false;
+
+                    Object currentComponent = stack.get(type);
+                    boolean match = true;
+
+                    if (rawRule.targetValue() != null) {
+                        if (!currentComponent.equals(rawRule.targetValue())) match = false;
+                    } else if (rawRule.requireDefault()) {
+                        Object defaultComponent = stack.getItem().components().get(type);
+                        if (defaultComponent == null || !currentComponent.equals(defaultComponent)) match = false;
+                    }
+
+                    if (match) {
+                        if (rawRule.subcomponents() == null || rawRule.subcomponents().isEmpty()) {
+                            stack.remove(type);
+                            changed = true;
+                        } else {
+                            // ИСПОЛЬЗУЕМ БЕЗОПАСНЫЙ МОСТ К ТВОЕМУ СКАЛЬПЕЛЮ
+                            changed |= applyModifierSafe(stack, type, rawRule.subcomponents());
+                        }
+                    }
                 }
 
-                // ================= ВЫПОЛНЕНИЕ =================
-                if (rule.subcomponents() == null || rule.subcomponents().isEmpty()) {
-                    stack.remove(rule.type());
+                if (changed) {
+                    markCyberSpaced(stack); // <--- КЛЕЙМИМ ПРЕДМЕТ!
                     tag.putBoolean(hackedTag, true);
-                    changed = true;
-                } else {
-                    // ПРОТОКОЛ ПОЛНОГО УНИЧТОЖЕНИЯ
-                    if (rule.subcomponents().containsKey("NUKE_COMPONENT")) {
-                        stack.remove(rule.type());
-                        tag.putBoolean(hackedTag, true);
-
-                        // Срываем чужие бирки
-                        for (Map.Entry<String, RuleData<?>> otherRule : REGISTERED_RULES.entrySet()) {
-                            if (!otherRule.getKey().equals(ruleId) && otherRule.getValue().type() == rule.type()) {
-                                tag.remove("hacked_" + otherRule.getKey());
-                            }
-                        }
-                        return true; // Завершаем работу, компонент удален!
-                    }
-
-                    // Обычная логика, если это не ядерный удар
-                    ModResult<T> result = modifySubcomponents(currentComponent, rule.subcomponents());
-
-                    // Если скальпель сказал, что он что-то изменил
-                    if (result.isModified()) {
-                        if (result.component() == null) {
-                            // Если вернулся null (например, для маркера Unit) — удаляем компонент целиком
-                            stack.remove(rule.type());
-                        } else {
-                            // Иначе сохраняем измененный объект
-                            stack.set(rule.type(), result.component());
-                        }
-
-                        tag.putBoolean(hackedTag, true);
-
-                        for (Map.Entry<String, RuleData<?>> otherRule : REGISTERED_RULES.entrySet()) {
-                            if (!otherRule.getKey().equals(ruleId) && otherRule.getValue().type() == rule.type()) {
-                                tag.remove("hacked_" + otherRule.getKey());
-                            }
-                        }
-                        changed = true;
-                    }
                 }
             }
-        } else {
-            // ================= ОТКАТ (С синхронизацией общих компонентов) =================
+        }
+        // ==========================================
+        // ОТКАТ (Фаза 1 в processItemStack)
+        // ==========================================
+        else {
             if (tag.contains(hackedTag)) {
-                // Возвращаем предмету его ванильный компонент
-                T vanillaComponent = stack.getItem().components().get(rule.type());
-                if (vanillaComponent != null) {
-                    stack.set(rule.type(), vanillaComponent);
-                } else {
-                    stack.remove(rule.type());
+                if (rawRule.targetItem() != null) {
+                    for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
+                        Object vanillaComponent = stack.getItem().components().get(compType);
+                        // ДОБАВИЛ КАСТ (DataComponentType<Object>)
+                        if (vanillaComponent != null) stack.set((DataComponentType<Object>) compType, vanillaComponent);
+                        else stack.remove(compType);
+                    }
+                } else if (rawRule.type() != null) {
+                    DataComponentType type = rawRule.type();
+                    Object vanillaComponent = stack.getItem().components().get(type);
+                    // ДОБАВИЛ КАСТ (DataComponentType<Object>)
+                    if (vanillaComponent != null) stack.set((DataComponentType<Object>) type, vanillaComponent);
+                    else stack.remove(type);
                 }
 
-                // Удаляем тег текущего (отключенного) правила
+                unmarkCyberSpaced(stack); // <--- СТИРАЕМ КЛЕЙМО БАНА
                 tag.remove(hackedTag);
-
-//                // МАГИЯ: Срываем бирки с других правил, которые работают с этим же компонентом (например, Rarity).
-//                // Это заставит их заново переоценить этот предмет в следующем тике!
-//                for (Map.Entry<String, RuleData<?>> otherRule : REGISTERED_RULES.entrySet()) {
-//                    if (ACTIVE_RULES.contains(otherRule.getKey()) && otherRule.getValue().type() == rule.type()) {
-//                        tag.remove("hacked_" + otherRule.getKey());
-//                    }
-//                }
-
                 changed = true;
             }
         }
@@ -468,30 +582,17 @@ public class DataHacker {
         return changed;
     }
 
-    public static boolean isMatch(ItemStack stack, RuleData<?> rule) {
-        if (stack.isEmpty() || !stack.has(rule.type())) return false;
+    @SuppressWarnings("unchecked")
+    private static <T> boolean applyModifierSafe(ItemStack stack, DataComponentType<T> type, Map<String, Object> subcomponents) {
+        T currentComponent = stack.get(type);
+        ModResult<T> result = modifySubcomponents(currentComponent, subcomponents);
 
-        // 1. НЕЗАВИСИМЫЙ МЭТЧ ПО ПРЕДМЕТУ
-        // Если в JSON указан target_item (например, diamond_sword), отсекаем всё остальное.
-        if (rule.targetItem() != null && !stack.is(rule.targetItem())) {
-            return false;
+        if (result.isModified()) {
+            if (result.component() == null) stack.remove(type);
+            else stack.set(type, result.component());
+            return true;
         }
-
-        // 2. НЕЗАВИСИМЫЙ МЭТЧ ПО ДЕФОЛТНОСТИ
-        // Если в JSON сказано require_default: true, проверяем "девственность" компонента.
-        if (rule.requireDefault()) {
-            Object currentComponent = stack.get(rule.type());
-
-            // Берем ванильный чертеж ИМЕННО ЭТОГО предмета, который сейчас в радаре
-            Object defaultComponent = stack.getItem().components().get(rule.type());
-
-            // Если компонент изменен (зачарован, баффнут плагином), мы его не трогаем
-            if (defaultComponent == null || !currentComponent.equals(defaultComponent)) {
-                return false;
-            }
-        }
-
-        return true; // Предмет прошел все активные фильтры
+        return false;
     }
 
     // =========================================
@@ -570,7 +671,6 @@ public class DataHacker {
         if (existingComponent instanceof net.minecraft.world.item.component.CustomData && (modifiers.containsKey("clear_custom_data") || modifiers.containsKey("bucket_entity_data"))) return new ModResult<>(null, true);
         if (existingComponent instanceof net.minecraft.world.item.component.UseEffects && modifiers.containsKey("use_effects")) return new ModResult<>(null, true);
         if ((existingComponent.getClass().getName().contains("EitherHolder") || existingComponent.getClass().getName().contains("DamageType")) && modifiers.containsKey("damage_type")) return new ModResult<>(null, true);
-        if (existingComponent instanceof net.minecraft.world.item.enchantment.ItemEnchantments && (modifiers.containsKey("enchantments") || modifiers.containsKey("stored_enchantments"))) return new ModResult<>(null, true);
         if (existingComponent instanceof net.minecraft.world.item.AdventureModePredicate && (modifiers.containsKey("can_place_on") || modifiers.containsKey("can_break"))) return new ModResult<>(null, true);
         if (existingComponent instanceof net.minecraft.world.item.component.ItemAttributeModifiers && modifiers.containsKey("attribute_modifiers")) return new ModResult<>(null, true);
         if (existingComponent instanceof net.minecraft.world.item.component.CustomModelData && modifiers.containsKey("custom_model_data")) return new ModResult<>(null, true);
@@ -855,6 +955,52 @@ public class DataHacker {
             }
         }
 
+        // ==========================================
+        // ЗАЧАРОВАНИЯ (ItemEnchantments)
+        // ==========================================
+        if (existingComponent instanceof net.minecraft.world.item.enchantment.ItemEnchantments enchs) {
+            if (modifiers.containsKey("enchantments") || modifiers.containsKey("stored_enchantments")) {
+                return new ModResult<>(null, true);
+            }
+
+            net.minecraft.world.item.enchantment.ItemEnchantments.Mutable mutable = new net.minecraft.world.item.enchantment.ItemEnchantments.Mutable(enchs);
+            net.minecraft.core.Registry<net.minecraft.world.item.enchantment.Enchantment> registry =
+                    TheGameOfLifeMod.SERVER.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
+
+            boolean isModified = false;
+            for (Map.Entry<String, Object> entry : modifiers.entrySet()) {
+                if (!entry.getKey().contains(":")) continue; // Обрабатываем только "minecraft:sharpness" и т.п.
+
+                net.minecraft.resources.Identifier enchId = net.minecraft.resources.Identifier.parse(entry.getKey());
+                var optEnch = registry.getOptional(enchId);
+
+                if (optEnch.isPresent()) {
+                    var holder = registry.wrapAsHolder(optEnch.get());
+                    int currentLevel = enchs.getLevel(holder);
+
+                    // ВОТ ОНА - ЕДИНАЯ ЛОГИКА ТВОЕГО МОДА!
+                    // Прогоняем текущий уровень через твои Квантовые Качели
+                    Object res = applySeesaw(currentLevel, entry.getKey(), entry.getValue());
+
+                    // applySeesaw вернет Integer (новый уровень зачарования)
+                    if (!res.equals(currentLevel)) {
+                        int newLevel = (Integer) res;
+                        // Если качели вернули 0 или меньше - стираем зачарование
+                        if (newLevel <= 0) {
+                            mutable.set(holder, 0);
+                        } else {
+                            mutable.set(holder, newLevel);
+                        }
+                        isModified = true;
+                    }
+                }
+            }
+
+            if (isModified) {
+                return new ModResult<>((T) mutable.toImmutable(), true);
+            }
+        }
+
         // Возврат по умолчанию, если ничего не подошло
         return new ModResult<>(existingComponent, false);
     }
@@ -888,5 +1034,34 @@ public class DataHacker {
 
         // 4. Fallback (для Enum, строк и прочего) - ИСПРАВЛЕНО
         return String.valueOf(currentVal).equalsIgnoreCase(String.valueOf(targetVal));
+    }
+
+    // Накладывает визуальное клеймо мутации
+    private static void markCyberSpaced(ItemStack stack) {
+        // Достаем текущий лор и добавляем нашу красную метку
+        net.minecraft.world.item.component.ItemLore currentLore = stack.getOrDefault(net.minecraft.core.component.DataComponents.LORE, net.minecraft.world.item.component.ItemLore.EMPTY);
+        java.util.List<net.minecraft.network.chat.Component> newLines = new java.util.ArrayList<>(currentLore.lines());
+
+        net.minecraft.network.chat.Component mark = net.minecraft.network.chat.Component.literal("CyberSpace'ed")
+                .withStyle(net.minecraft.ChatFormatting.DARK_RED, net.minecraft.ChatFormatting.BOLD);
+
+        // Защита от спама (чтобы надпись не дублировалась)
+        if (!newLines.contains(mark)) {
+            newLines.add(mark);
+            stack.set(net.minecraft.core.component.DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(newLines));
+        }
+    }
+
+    // Стирает визуальное клеймо мутации
+    private static void unmarkCyberSpaced(ItemStack stack) {
+        // Аккуратно вырезаем нашу строчку из лора
+        net.minecraft.world.item.component.ItemLore lore = stack.get(net.minecraft.core.component.DataComponents.LORE);
+        if (lore != null) {
+            java.util.List<net.minecraft.network.chat.Component> lines = new java.util.ArrayList<>(lore.lines());
+            lines.removeIf(c -> c.getString().contains("CyberSpace'ed"));
+
+            if (lines.isEmpty()) stack.remove(net.minecraft.core.component.DataComponents.LORE);
+            else stack.set(net.minecraft.core.component.DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(lines));
+        }
     }
 }
