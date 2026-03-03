@@ -1,6 +1,7 @@
 package com.thegameoflife.mixin;
 
 import com.thegameoflife.DataHacker;
+import com.thegameoflife.TheGameOfLifeMod;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.ItemStack;
@@ -15,22 +16,33 @@ public abstract class ItemStackMixin {
 
     @Shadow public abstract boolean isEmpty();
 
-    /**
-     * СТИРАЕМ ДЖЕНЕРИКИ: Используем <?> и Object, чтобы соответствовать байт-коду JVM.
-     * CallbackInfoReturnable тоже типизируем как <Object>.
-     */
-    @Inject(method = "set", at = @At("HEAD"))
+    @Inject(method = "set", at = @At("RETURN"))
     private void autoPatchOnSet(DataComponentType<?> type, Object value, CallbackInfoReturnable<Object> cir) {
+        // 1. ЩИТ: Работаем ТОЛЬКО на сервере и только когда он полностью запущен.
+        // Игнорируем отрисовку UI клиента (Render thread) и генерацию мира!
+        if (TheGameOfLifeMod.SERVER == null || !Thread.currentThread().getName().equals("Server thread")) return;
 
-        // 1. ЗАЩИТА ОТ РЕКУРСИИ
-        // Если DataHacker сам записывает свой паспорт в предмет - мы игнорируем этот вызов!
-        if (type == DataComponents.CUSTOM_DATA) {
-            return;
-        }
+        // 2. Защита от рекурсии Конвейера
+        if (type == DataComponents.CUSTOM_DATA || DataHacker.isProcessing) return;
 
-        // 2. БЫСТРАЯ ПРОВЕРКА
+        ItemStack stack = (ItemStack) (Object) this;
+
+        // Записываем дифф и МОМЕНТАЛЬНО бьем конвейером (Предметы меняются ВЕЗДЕ)
+        DataHacker.recordPlayerDiff(stack, type, value);
         if (!this.isEmpty()) {
-            DataHacker.processItemStack((ItemStack) (Object) this, false, false);
+            DataHacker.processItemStack(stack, false, false);
+        }
+    }
+
+    @Inject(method = "remove", at = @At("RETURN"))
+    private void autoPatchOnRemove(DataComponentType<?> type, CallbackInfoReturnable<Object> cir) {
+        if (TheGameOfLifeMod.SERVER == null || !Thread.currentThread().getName().equals("Server thread")) return;
+        if (type == DataComponents.CUSTOM_DATA || DataHacker.isProcessing) return;
+
+        ItemStack stack = (ItemStack) (Object) this;
+        DataHacker.recordPlayerDiff(stack, type, null);
+        if (!this.isEmpty()) {
+            DataHacker.processItemStack(stack, false, false);
         }
     }
 }

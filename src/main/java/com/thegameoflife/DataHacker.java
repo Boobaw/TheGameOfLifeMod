@@ -273,21 +273,31 @@ public class DataHacker {
                 ItemStack stack = p.getInventory().getItem(i);
 
                 if (isEquipped && !stack.isEmpty()) {
+                    // 1. Открываем ворота для Миксина, чтобы он записал бафф
+                    boolean wasProcessing = isProcessing;
+                    isProcessing = false;
+
                     if (rule.targetItem() != null) {
                         for (var typedComp : rule.targetItem().components()) {
                             stack.set((DataComponentType) typedComp.type(), typedComp.value());
                         }
                     } else if (rule.type() != null && rule.subcomponents() != null) {
-                        applyModifierSafe(stack, rule.type(), rule.subcomponents());
+                        applyModifierSafe(stack, rule.type(), rule.subcomponents(), true);
                     }
 
-                    // Срываем клеймо бана, если оно было, и ставим маркер измененного предмета
+                    // 2. Закрываем ворота. Миксин не должен видеть системные метки!
+                    isProcessing = true;
+
                     CustomData customData = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
                     CompoundTag tag = customData.copyTag();
-                    tag.remove("hacked_" + ruleId);
 
-                    markCyberSpaced(stack);
+                    tag.remove("hacked_" + ruleId);
+                    tag.putBoolean("buffed_" + ruleId, true); // <--- СТАВИМ МЕТКУ БАФФА
+                    tag.remove("datahacker_epoch");           // Грязный флаг (Конвейер сам обновит предмет)
+
                     stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+                    isProcessing = wasProcessing;
+
                     inventoryChanged = true;
                 }
             }
@@ -296,7 +306,7 @@ public class DataHacker {
     }
 
     // =========================================
-    // ЛОКАТОР СОВПАДЕНИЙ (Обновленный, без targetValue)
+    // ЛОКАТОР СОВПАДЕНИЙ (Обновленный, без слепых Джокеров)
     // =========================================
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static boolean isMatch(ItemStack stack, RuleData<?> rawRule) {
@@ -305,7 +315,7 @@ public class DataHacker {
         // --- СЦЕНАРИЙ А: Квантовый Слепок (Предмет) ---
         if (rawRule.targetItem() != null) {
             if (!rawRule.requireDefault() && stack.is(rawRule.targetItem())) {
-                return true; // Кувалда
+                return true;
             }
 
             for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
@@ -315,7 +325,7 @@ public class DataHacker {
                 Object defaultDonorComponent = rawRule.targetItem().components().get(compType);
 
                 if (defaultDonorComponent != null && currentComponent.equals(defaultDonorComponent)) {
-                    return true; // Вирус
+                    return true;
                 }
             }
             return false;
@@ -331,18 +341,21 @@ public class DataHacker {
             // ЕСЛИ ЕСТЬ ВЛОЖЕННЫЕ ПАРАМЕТРЫ
             if (rawRule.subcomponents() != null && !rawRule.subcomponents().isEmpty()) {
 
-                // Превращаем любой ванильный компонент (Enum, Чары, Примитив) в единую строку!
                 String currentStr = String.valueOf(currentComponent).toLowerCase();
 
                 for (Map.Entry<String, Object> entry : rawRule.subcomponents().entrySet()) {
-                    if (entry.getValue() == null) return true; // Джокер
-
-                    String reqValue = String.valueOf(entry.getValue()).toLowerCase();
                     String reqKey = entry.getKey().toLowerCase();
 
-                    // Ищем совпадение прямо в сыром тексте компонента.
-                    // Это покроет 99% случаев (Rarity.EPIC -> "epic", Чары -> ключи и уровни)
-                    // Ищем совпадение прямо в сыром тексте компонента.
+                    // === ИСПРАВЛЕНИЕ ===
+                    // Если значение null (это Бан), мы обязаны проверить,
+                    // присутствует ли сам ключ чара (например, "minecraft:sharpness") на предмете!
+                    if (entry.getValue() == null) {
+                        if (currentStr.contains(reqKey)) return true;
+                        continue;
+                    }
+
+                    // Если значение не null (Бафф или поиск точного уровня)
+                    String reqValue = String.valueOf(entry.getValue()).toLowerCase();
                     if (currentStr.contains(reqValue) || currentStr.contains(reqKey)) {
                         return true;
                     }
@@ -463,15 +476,13 @@ public class DataHacker {
     // =========================================
     public static boolean isProcessing = false;
 
-
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public static boolean processItemStack(ItemStack stack, boolean inPlayerInventory, boolean isEquipped) {
         if (stack.isEmpty() || isProcessing) return false;
 
         CustomData customData = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
         CompoundTag tag = customData.copyTag();
 
-        // Сверка часов: Если предмет живет в текущей эпохе - не трогаем его
-        // (Используем обычный getInt, так как в CompoundTag он возвращает 0, если ключа нет)
         int itemEpoch = tag.getInt("datahacker_epoch").orElse(0);
         if (itemEpoch == DATA_EPOCH) return false;
 
@@ -479,52 +490,69 @@ public class DataHacker {
         boolean changed = false;
 
         try {
-            // ==========================================
-            // ФАЗА 1: ОЧИСТКА (Откат отключенных правил)
-            // ==========================================
-            // Прогоняем только те правила, которые мы выключили (их нет в ACTIVE_RULES)
-            for (Map.Entry<String, RuleData<?>> entry : REGISTERED_RULES.entrySet()) {
-                if (!ACTIVE_RULES.contains(entry.getKey())) {
-                    try {
-                        changed |= applyRule(
-                                stack, tag, entry.getKey(), entry.getValue(),
-                                false, // isActive = false запускает блок ОТКАТА в applyRule
-                                inPlayerInventory, isEquipped
-                        );
-                    } catch (Exception ex) {
-                        // Тихо гасим ошибки, чтобы один кривой компонент не убил всю очистку
-                    }
+            // ШАГ 1: ПЕРВОЕ КАСАНИЕ (Оцифровка предмета)
+            initializeItemDiff(stack, tag);
+
+            // ШАГ 2: ПОЛНЫЙ СБРОС (Табула Раса)
+            // Безопасное удаление: сначала собираем список, потом сносим!
+            java.util.List<DataComponentType<?>> toRemove = new java.util.ArrayList<>();
+            for (var typedComp : stack.getComponents()) {
+                if (typedComp.type() != DataComponents.CUSTOM_DATA) {
+                    toRemove.add(typedComp.type());
                 }
             }
+            for (DataComponentType<?> type : toRemove) {
+                stack.remove((DataComponentType) type);
+            }
+
+            // Вшиваем дефолтную ваниль из реестра
+            for (var typedComp : stack.getItem().components()) {
+                setComponentRaw(stack, typedComp.type(), typedComp.value());
+            }
+
+            // ШАГ 3: НАКАТ ДИФФА (Возвращаем честные данные игрока)
+            applyPlayerDiff(stack, tag);
 
             // ==========================================
-            // ФАЗА 2: НАКАТ (Применение активных правил)
+            // ФИКС МЕТОК: Стираем старые записи о банах!
+            // Конвейер ниже поставит их заново, ТОЛЬКО если бан всё еще активен.
+            java.util.List<String> staleTags = new java.util.ArrayList<>();
+            for (String key : tag.keySet()) {
+                if (key.startsWith("hacked_")) staleTags.add(key);
+            }
+            staleTags.forEach(tag::remove);
             // ==========================================
-            // Теперь накатываем активные правила поверх чистого листа
+
+            // ШАГ 4: КОНВЕЙЕР (Работают только активные правила!)
             for (String activeId : ACTIVE_RULES) {
                 RuleData<?> rule = REGISTERED_RULES.get(activeId);
                 if (rule != null) {
                     try {
-                        changed |= applyRule(
-                                stack, tag, activeId, rule,
-                                true, // isActive = true запускает блок БАНА/БАФФА
-                                inPlayerInventory, isEquipped
-                        );
+                        changed |= applyRule(stack, tag, activeId, rule, true, inPlayerInventory, isEquipped);
                     } catch (Exception ex) {
-                        // Тихо гасим ошибки
+                        System.err.println("[DataHacker] Ошибка в правиле: " + activeId);
                     }
                 }
             }
 
-            // Штампуем новую эпоху в паспорт предмета
+            // ==========================================
+            // ШАГ 5: ФИНАЛЬНАЯ ПЕЧАТЬ (Динамическое клеймо)
+            // ==========================================
+            boolean isMutated = false;
+            for (String key : tag.keySet()) {
+                if (key.startsWith("hacked_") || key.startsWith("buffed_")) {
+                    isMutated = true;
+                    break;
+                }
+            }
+            if (isMutated) {
+                markCyberSpaced(stack);
+                changed = true; // Принудительно обновляем инвентарь клиента
+            }
+
+            // Штампуем новую эпоху
             tag.putInt("datahacker_epoch", DATA_EPOCH);
-
-            // Сохраняем NBT
             stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-
-            // Возвращаем true, чтобы инвентарь синхронизировался с клиентом.
-            // Эпоха обновилась в любом случае, так что предмет изменился.
-            changed = true;
 
         } finally {
             isProcessing = false;
@@ -533,14 +561,13 @@ public class DataHacker {
         return changed;
     }
 
+
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static boolean applyRule(ItemStack stack, CompoundTag tag, String ruleId, RuleData<?> rawRule, boolean isActive, boolean inPlayerInventory, boolean isEquipped) {
         boolean changed = false;
         String hackedTag = "hacked_" + ruleId;
 
         if (isActive) {
-            if (tag.contains(hackedTag)) return false;
-
             // ==========================================
             // БЕЗУСЛОВНЫЙ БАН (Выжигание компонентов)
             // ==========================================
@@ -566,7 +593,7 @@ public class DataHacker {
                             changed = true;
                         } else {
                             // Скальпель сам всё проверит и изменит
-                            ModResult result = modifySubcomponents(currentComponent, rawRule.subcomponents());
+                            ModResult result = modifySubcomponents(currentComponent, rawRule.subcomponents(), false);
                             if (result.isModified()) {
                                 stack.set(compType, result.component());
                                 changed = true;
@@ -584,7 +611,7 @@ public class DataHacker {
 
                 // ЕСЛИ ЕСТЬ ВЛОЖЕННЫЕ ПАРАМЕТРЫ -> ОТДАЕМ ВСЁ СКАЛЬПЕЛЮ
                 if (rawRule.subcomponents() != null && !rawRule.subcomponents().isEmpty()) {
-                    ModResult result = modifySubcomponents(currentComponent, rawRule.subcomponents());
+                    ModResult result = modifySubcomponents(currentComponent, rawRule.subcomponents(), false);
                     if (result.isModified()) {
                         stack.set(type, result.component());
                         changed = true;
@@ -607,42 +634,17 @@ public class DataHacker {
             }
 
             if (changed) {
-                markCyberSpaced(stack);
                 tag.putBoolean(hackedTag, true);
             }
 
         }
-        // ==========================================
-        // ОТКАТ
-        // ==========================================
-        else {
-            if (tag.contains(hackedTag)) {
-                if (rawRule.targetItem() != null) {
-                    for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
-                        Object vanillaComponent = stack.getItem().components().get(compType);
-                        if (vanillaComponent != null) stack.set((DataComponentType<Object>) compType, vanillaComponent);
-                        else stack.remove(compType);
-                    }
-                } else if (rawRule.type() != null) {
-                    DataComponentType type = rawRule.type();
-                    Object vanillaComponent = stack.getItem().components().get(type);
-                    if (vanillaComponent != null) stack.set((DataComponentType<Object>) type, vanillaComponent);
-                    else stack.remove(type);
-                }
-
-                unmarkCyberSpaced(stack);
-                tag.remove(hackedTag);
-                changed = true;
-            }
-        }
-
         return changed;
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> boolean applyModifierSafe(ItemStack stack, DataComponentType<T> type, Map<String, Object> subcomponents) {
-        T currentComponent = stack.get(type);
-        ModResult<T> result = modifySubcomponents(currentComponent, subcomponents);
+    private static <T> boolean applyModifierSafe(ItemStack stack, DataComponentType<T> type, Map<String, Object> subcomponents, boolean force) {
+        T currentComponent = stack.getOrDefault(type, null); // Изменили get на getOrDefault, чтобы избежать крашей
+        ModResult<T> result = modifySubcomponents(currentComponent, subcomponents, force);
 
         if (result.isModified()) {
             if (result.component() == null) stack.remove(type);
@@ -655,9 +657,35 @@ public class DataHacker {
     // =========================================
     // УНИВЕРСАЛЬНЫЕ КАЧЕЛИ (Anti-Absurd Logic)
     // =========================================
-    private static Object applySeesaw(Object currentValue, String key, Object targetVal) {
-        Object absurdVal = ABSURD_VALUES.get(key);
-        Object invertedVal = INVERTED_VALUES.get(key);
+
+    // Обертка для примитивов (берет лимиты из глобальных словарей по ключу)
+    private static Object applySeesaw(Object currentValue, String key, Object targetVal, boolean force) {
+        return applySeesaw(currentValue, targetVal, ABSURD_VALUES.get(key), INVERTED_VALUES.get(key), force);
+    }
+
+    // Базовый метод (принимает явные лимиты)
+    private static Object applySeesaw(Object currentValue, Object targetVal, Object absurdVal, Object invertedVal, boolean force) {
+
+        // 0. ФОРСИРОВАНИЕ (БАФФ): Жестко возвращаем целевое значение с защитой типов
+        if (force) {
+
+            if (targetVal == null) {
+                // Если у компонента есть Потолок - выдаем его. Иначе оставляем предмет в покое.
+                return invertedVal != null ? invertedVal : currentValue;
+            }
+
+            if (invertedVal != null && checkValueMatch(invertedVal, targetVal)) return invertedVal;
+            if (absurdVal != null && checkValueMatch(absurdVal, targetVal)) return absurdVal;
+
+            try {
+                if (currentValue instanceof Integer) return Integer.parseInt(String.valueOf(targetVal));
+                if (currentValue instanceof Float) return Float.parseFloat(String.valueOf(targetVal));
+                if (currentValue instanceof Boolean) return Boolean.parseBoolean(String.valueOf(targetVal));
+            } catch (Exception e) {
+                return currentValue;
+            }
+            return targetVal;
+        }
 
         // 1. Безусловный бан
         if (targetVal == null) return absurdVal;
@@ -680,7 +708,7 @@ public class DataHacker {
     // СКАЛЬПЕЛЬ (С оптимизированным возвратом)
     // =========================================
     @SuppressWarnings("unchecked")
-    private static <T> ModResult<T> modifySubcomponents(T existingComponent, Map<String, Object> modifiers) {
+    private static <T> ModResult<T> modifySubcomponents(T existingComponent, Map<String, Object> modifiers, boolean force) {
         if (existingComponent == null || modifiers == null || modifiers.isEmpty()) {
             return new ModResult<>(existingComponent, false);
         }
@@ -691,27 +719,25 @@ public class DataHacker {
         if (existingComponent instanceof Integer currentInt) {
             for (Map.Entry<String, Object> entry : modifiers.entrySet()) {
                 String key = entry.getKey();
-                // MAX_STACK_SIZE, MAX_DAMAGE, DAMAGE
                 if (key.equals("max_stack_size") || key.equals("damage") || key.equals("max_damage") || key.equals("repair_cost")) {
-                    Object res = applySeesaw(currentInt, key, entry.getValue());
+                    Object res = applySeesaw(currentInt, key, entry.getValue(), force);
                     if (!res.equals(currentInt)) return new ModResult<>((T) res, true);
                 }
             }
         }
         if (existingComponent instanceof Float currentFloat) {
             if (modifiers.containsKey("minimum_attack_charge")) {
-                Object res = applySeesaw(currentFloat, "minimum_attack_charge", modifiers.get("minimum_attack_charge"));
+                Object res = applySeesaw(currentFloat, "minimum_attack_charge", modifiers.get("minimum_attack_charge"), force);
                 if (!res.equals(currentFloat)) return new ModResult<>((T) res, true);
             }
-            // Множитель длительности зелий
             if (modifiers.containsKey("potion_duration_scale")) {
-                Object res = applySeesaw(currentFloat, "potion_duration_scale", modifiers.get("potion_duration_scale"));
+                Object res = applySeesaw(currentFloat, "potion_duration_scale", modifiers.get("potion_duration_scale"), force);
                 if (!res.equals(currentFloat)) return new ModResult<>((T) res, true);
             }
         }
         if (existingComponent instanceof Boolean currentBool) {
             if (modifiers.containsKey("enchantment_glint_override")) {
-                Object res = applySeesaw(currentBool, "enchantment_glint_override", modifiers.get("enchantment_glint_override"));
+                Object res = applySeesaw(currentBool, "enchantment_glint_override", modifiers.get("enchantment_glint_override"), force);
                 if (!res.equals(currentBool)) return new ModResult<>((T) res, true);
             }
         }
@@ -927,7 +953,7 @@ public class DataHacker {
         // 4. СЛОЖНЫЕ ОБЪЕКТЫ С КАЧЕЛЯМИ
         // ==========================================
 
-        // TOOL (Инструменты: Кирки, топоры, лопаты)
+        // TOOL
         if (existingComponent instanceof net.minecraft.world.item.component.Tool tool) {
             float speed = tool.defaultMiningSpeed();
             int damagePerBlock = tool.damagePerBlock();
@@ -935,15 +961,15 @@ public class DataHacker {
             boolean isModified = false;
 
             if (modifiers.containsKey("mining_speed")) {
-                Object res = applySeesaw(speed, "mining_speed", modifiers.get("mining_speed"));
+                Object res = applySeesaw(speed, "mining_speed", modifiers.get("mining_speed"), force);
                 if (!res.equals(speed)) { speed = (Float) res; isModified = true; }
             }
             if (modifiers.containsKey("damage_per_block")) {
-                Object res = applySeesaw(damagePerBlock, "damage_per_block", modifiers.get("damage_per_block"));
+                Object res = applySeesaw(damagePerBlock, "damage_per_block", modifiers.get("damage_per_block"), force);
                 if (!res.equals(damagePerBlock)) { damagePerBlock = (Integer) res; isModified = true; }
             }
             if (modifiers.containsKey("canDestroyBlocksInCreative")) {
-                Object res = applySeesaw(canDestroyBlocksInCreative, "canDestroyBlocksInCreative", modifiers.get("canDestroyBlocksInCreative"));
+                Object res = applySeesaw(canDestroyBlocksInCreative, "canDestroyBlocksInCreative", modifiers.get("canDestroyBlocksInCreative"), force);
                 if (!res.equals(canDestroyBlocksInCreative)) { canDestroyBlocksInCreative = (Boolean) res; isModified = true; }
             }
             if (isModified) {
@@ -951,65 +977,45 @@ public class DataHacker {
             }
         }
 
-        // ENCHANTABLE (Уровень зачаровываемости)
+        // ENCHANTABLE
         if (existingComponent instanceof net.minecraft.world.item.enchantment.Enchantable enchantable && modifiers.containsKey("enchantable")) {
             int val = enchantable.value();
-            Object res = applySeesaw(val, "enchantable", modifiers.get("enchantable"));
-            if (!res.equals(val)) {
-                return new ModResult<>((T) new net.minecraft.world.item.enchantment.Enchantable((Integer) res), true);
-            }
+            Object res = applySeesaw(val, "enchantable", modifiers.get("enchantable"), force);
+            if (!res.equals(val)) return new ModResult<>((T) new net.minecraft.world.item.enchantment.Enchantable((Integer) res), true);
         }
 
-        // ATTACK_RANGE (Дальность атаки)
+        // ATTACK_RANGE
         if (existingComponent instanceof net.minecraft.world.item.component.AttackRange range && modifiers.containsKey("attack_range")) {
-            // Приводим double от maxRange() к float
             float val = (float) range.maxRange();
-            Object res = applySeesaw(val, "attack_range", modifiers.get("attack_range"));
-
+            Object res = applySeesaw(val, "attack_range", modifiers.get("attack_range"), force);
             if (!res.equals(val)) {
                 float newRange = (Float) res;
-                // Бьем наверняка: передаем новое значение во все 6 параметров (f, g, h, i, j, k)
                 return new ModResult<>((T) new net.minecraft.world.item.component.AttackRange(newRange, newRange, newRange, newRange, newRange, newRange), true);
             }
         }
 
-        // CONSUMABLE (Время поедания / использования)
-        if (existingComponent instanceof net.minecraft.world.item.component.Consumable consumable) {
-            if (modifiers.containsKey("consume_seconds")) {
-                float consumeSeconds = consumable.consumeSeconds();
-                Object res = applySeesaw(consumeSeconds, "consume_seconds", modifiers.get("consume_seconds"));
-
-                if (!res.equals(consumeSeconds)) {
-                    // Пересобираем компонент с новым временем, но старыми партиклами и звуками
-                    net.minecraft.world.item.component.Consumable newConsumable = net.minecraft.world.item.component.Consumable.builder()
-                            .consumeSeconds((Float) res)
-                            .animation(consumable.animation())
-                            .sound(consumable.sound())
-                            .hasConsumeParticles(consumable.hasConsumeParticles())
-                            .build();
-                    return new ModResult<>((T) newConsumable, true);
-                }
+        // CONSUMABLE
+        if (existingComponent instanceof net.minecraft.world.item.component.Consumable consumable && modifiers.containsKey("consume_seconds")) {
+            float consumeSeconds = consumable.consumeSeconds();
+            Object res = applySeesaw(consumeSeconds, "consume_seconds", modifiers.get("consume_seconds"), force);
+            if (!res.equals(consumeSeconds)) {
+                net.minecraft.world.item.component.Consumable newConsumable = net.minecraft.world.item.component.Consumable.builder()
+                        .consumeSeconds((Float) res).animation(consumable.animation()).sound(consumable.sound()).hasConsumeParticles(consumable.hasConsumeParticles()).build();
+                return new ModResult<>((T) newConsumable, true);
             }
         }
 
-        // USE_COOLDOWN (Перезарядка после использования, например, эндер-жемчуга)
-        if (existingComponent instanceof net.minecraft.world.item.component.UseCooldown cooldownComp) {
-            if (modifiers.containsKey("use_cooldown")) {
-                float seconds = cooldownComp.seconds();
-                Object res = applySeesaw(seconds, "use_cooldown", modifiers.get("use_cooldown"));
-
-                if (!res.equals(seconds)) {
-                    return new ModResult<>((T) new net.minecraft.world.item.component.UseCooldown((Float) res), true);
-                }
-            }
+        // USE_COOLDOWN
+        if (existingComponent instanceof net.minecraft.world.item.component.UseCooldown cooldownComp && modifiers.containsKey("use_cooldown")) {
+            float seconds = cooldownComp.seconds();
+            Object res = applySeesaw(seconds, "use_cooldown", modifiers.get("use_cooldown"), force);
+            if (!res.equals(seconds)) return new ModResult<>((T) new net.minecraft.world.item.component.UseCooldown((Float) res), true);
         }
 
         // RARITY
-        if (existingComponent instanceof net.minecraft.world.item.Rarity currentRarity) {
-            if (modifiers.containsKey("rarity")) {
-                Object res = applySeesaw(currentRarity, "rarity", modifiers.get("rarity"));
-                if (!res.equals(currentRarity)) return new ModResult<>((T) res, true);
-            }
+        if (existingComponent instanceof net.minecraft.world.item.Rarity currentRarity && modifiers.containsKey("rarity")) {
+            Object res = applySeesaw(currentRarity, "rarity", modifiers.get("rarity"), force);
+            if (!res.equals(currentRarity)) return new ModResult<>((T) res, true);
         }
 
         // ==========================================
@@ -1026,23 +1032,20 @@ public class DataHacker {
 
             boolean isModified = false;
             for (Map.Entry<String, Object> entry : modifiers.entrySet()) {
-                if (!entry.getKey().contains(":")) continue; // Обрабатываем только "minecraft:sharpness" и т.п.
+                // Оставляем только как защиту от кривого JSON, чтобы Identifier.parse не крашнул игру
+                if (!entry.getKey().contains(":")) continue;
 
-                net.minecraft.resources.Identifier enchId = net.minecraft.resources.Identifier.parse(entry.getKey());
-                var optEnch = registry.getOptional(enchId);
+                var optEnch = registry.getOptional(net.minecraft.resources.Identifier.parse(entry.getKey()));
 
                 if (optEnch.isPresent()) {
                     var holder = registry.wrapAsHolder(optEnch.get());
                     int currentLevel = enchs.getLevel(holder);
 
-                    // ВОТ ОНА - ЕДИНАЯ ЛОГИКА ТВОЕГО МОДА!
-                    // Прогоняем текущий уровень через твои Квантовые Качели
-                    Object res = applySeesaw(currentLevel, entry.getKey(), entry.getValue());
+                    // ПРЯМАЯ ПЕРЕДАЧА ЛИМИТОВ: Дно = 0, Инверсия = 255
+                    Object res = applySeesaw(currentLevel, entry.getValue(), 0, 255, force);
 
-                    // applySeesaw вернет Integer (новый уровень зачарования)
-                    if (!res.equals(currentLevel)) {
+                    if (res != null && !res.equals(currentLevel)) {
                         int newLevel = (Integer) res;
-                        // Если качели вернули 0 или меньше - стираем зачарование
                         if (newLevel <= 0) {
                             mutable.set(holder, 0);
                         } else {
@@ -1058,7 +1061,6 @@ public class DataHacker {
             }
         }
 
-        // Возврат по умолчанию, если ничего не подошло
         return new ModResult<>(existingComponent, false);
     }
 
@@ -1109,16 +1111,154 @@ public class DataHacker {
         }
     }
 
-    // Стирает визуальное клеймо мутации
-    private static void unmarkCyberSpaced(ItemStack stack) {
-        // Аккуратно вырезаем нашу строчку из лора
-        net.minecraft.world.item.component.ItemLore lore = stack.get(net.minecraft.core.component.DataComponents.LORE);
-        if (lore != null) {
-            java.util.List<net.minecraft.network.chat.Component> lines = new java.util.ArrayList<>(lore.lines());
-            lines.removeIf(c -> c.getString().contains("CyberSpace'ed"));
 
-            if (lines.isEmpty()) stack.remove(net.minecraft.core.component.DataComponents.LORE);
-            else stack.set(net.minecraft.core.component.DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(lines));
+    // =========================================
+    // ТЕНЕВАЯ ПАМЯТЬ (Shadow Memory & Diffing)
+    // =========================================
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static void initializeItemDiff(ItemStack stack, CompoundTag tag) {
+        if (tag.contains("dh_initialized")) return; // Предмет уже оцифрован
+
+        CompoundTag diffTag = new CompoundTag();
+        net.minecraft.core.RegistryAccess registryAccess = TheGameOfLifeMod.SERVER.registryAccess();
+        net.minecraft.resources.RegistryOps<net.minecraft.nbt.Tag> ops = net.minecraft.resources.RegistryOps.create(net.minecraft.nbt.NbtOps.INSTANCE, registryAccess);
+
+        // Сравниваем предмет с ванильным эталоном
+        for (var typedComp : stack.getComponents()) {
+            DataComponentType<?> type = typedComp.type();
+
+            // ПРОПУСКАЕМ CustomData!
+            if (type == DataComponents.CUSTOM_DATA) continue;
+
+            Object vanillaValue = stack.getItem().components().get(type);
+            Object currentValue = typedComp.value();
+
+            // === ЩИТ ДЛЯ ЛОРА (Не даем системной метке попасть в дифф) ===
+            if (type == DataComponents.LORE && currentValue != null) {
+                net.minecraft.world.item.component.ItemLore lore = (net.minecraft.world.item.component.ItemLore) currentValue;
+                java.util.List<net.minecraft.network.chat.Component> cleanLines = new java.util.ArrayList<>(lore.lines());
+                cleanLines.removeIf(c -> c.getString().contains("CyberSpace'ed"));
+
+                if (cleanLines.isEmpty()) {
+                    currentValue = null; // Если лор был только из нашей метки - сносим его
+                } else {
+                    currentValue = new net.minecraft.world.item.component.ItemLore(cleanLines);
+                }
+            }
+
+            if (currentValue == null) continue;
+
+            // Если компонент на предмете отличается от ванили
+            if (vanillaValue == null || !currentValue.equals(vanillaValue)) {
+                if (type.codec() != null) {
+                    try {
+                        com.mojang.serialization.Codec codec = type.codec();
+                        net.minecraft.nbt.Tag serialized = (net.minecraft.nbt.Tag) codec.encodeStart(ops, currentValue).getOrThrow();
+                        net.minecraft.resources.Identifier id = net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(type);
+                        if (id != null) diffTag.put(id.toString(), serialized);
+                    } catch (Exception e) {
+                        System.err.println("[DataHacker] Ошибка сериализации диффа: " + type);
+                    }
+                }
+            }
         }
+        tag.put("dh_player_diff", diffTag);
+        tag.putBoolean("dh_initialized", true);
+    }
+
+    // =========================================
+    // ТЕНЕВАЯ ПАМЯТЬ (Shadow Memory & Diffing)
+    // =========================================
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static void recordPlayerDiff(ItemStack stack, DataComponentType type, Object value) {
+        if (type == DataComponents.CUSTOM_DATA) return;
+
+        // === ЩИТ ДЛЯ ЛОРА: Вырезаем нашу красную метку перед сохранением в память ===
+        if (type == DataComponents.LORE && value != null) {
+            net.minecraft.world.item.component.ItemLore lore = (net.minecraft.world.item.component.ItemLore) value;
+            java.util.List<net.minecraft.network.chat.Component> cleanLines = new java.util.ArrayList<>(lore.lines());
+            cleanLines.removeIf(c -> c.getString().contains("CyberSpace'ed"));
+
+            if (cleanLines.isEmpty()) value = null; // Если лор стал пустым - удаляем компонент
+            else value = new net.minecraft.world.item.component.ItemLore(cleanLines);
+        }
+
+        CustomData customData = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
+        CompoundTag tag = customData.copyTag();
+        CompoundTag diffTag = tag.contains("dh_player_diff") ? tag.getCompoundOrEmpty("dh_player_diff") : new CompoundTag();
+
+        net.minecraft.core.RegistryAccess registryAccess = TheGameOfLifeMod.SERVER.registryAccess();
+        net.minecraft.resources.RegistryOps<net.minecraft.nbt.Tag> ops = net.minecraft.resources.RegistryOps.create(net.minecraft.nbt.NbtOps.INSTANCE, registryAccess);
+        net.minecraft.resources.Identifier id = net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(type);
+
+        if (id == null) return;
+        String key = id.toString();
+
+        if (value == null) {
+            diffTag.putBoolean(key + "_removed", true);
+            diffTag.remove(key);
+        } else {
+            if (type.codec() != null && type.codec() != null) {
+                try {
+                    com.mojang.serialization.Codec codec = type.codec();
+                    net.minecraft.nbt.Tag serialized = (net.minecraft.nbt.Tag) codec.encodeStart(ops, value).getOrThrow();
+                    diffTag.put(key, serialized);
+                    diffTag.remove(key + "_removed");
+                } catch (Exception e) {}
+            }
+        }
+
+        tag.put("dh_player_diff", diffTag);
+
+        // ==========================================
+        // МАГИЯ ИНВАЛИДАЦИИ (ГРЯЗНЫЙ ФЛАГ)
+        // Стираем эпоху. Теперь Конвейер будет обязан перепроверить предмет!
+        tag.remove("datahacker_epoch");
+        // ==========================================
+
+        boolean wasProcessing = isProcessing;
+        isProcessing = true;
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+        isProcessing = wasProcessing;
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static void applyPlayerDiff(ItemStack stack, CompoundTag tag) {
+        if (!tag.contains("dh_player_diff")) return;
+        CompoundTag diffTag = tag.getCompoundOrEmpty("dh_player_diff");
+
+        net.minecraft.core.RegistryAccess registryAccess = TheGameOfLifeMod.SERVER.registryAccess();
+        net.minecraft.resources.RegistryOps<net.minecraft.nbt.Tag> ops = net.minecraft.resources.RegistryOps.create(net.minecraft.nbt.NbtOps.INSTANCE, registryAccess);
+
+        for (String compId : diffTag.keySet()) {
+            // Если игрок УДАЛИЛ ванильный компонент - сносим его и тут
+            if (compId.endsWith("_removed")) {
+                String realId = compId.replace("_removed", "");
+                net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.parse(realId);
+                DataComponentType type = net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_TYPE.getValue(id);
+                if (type != null) stack.remove(type);
+                continue;
+            }
+
+            // Иначе накатываем компонент игрока поверх ванили
+            net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.parse(compId);
+            DataComponentType type = net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_TYPE.getValue(id);
+
+            if (type != null && type.codec() != null && type.codec() != null) {
+                try {
+                    com.mojang.serialization.Codec codec = type.codec();
+                    Object parsed = codec.parse(ops, diffTag.get(compId)).getOrThrow();
+                    stack.set(type, parsed);
+                } catch (Exception e) {}
+            }
+        }
+    }
+
+    // Утилита для обхода дженериков при работе с сырыми типами
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void setComponentRaw(ItemStack stack, DataComponentType type, Object value) {
+        stack.set(type, value);
     }
 }
