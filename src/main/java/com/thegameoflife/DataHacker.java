@@ -50,9 +50,7 @@ public class DataHacker {
             DataComponentType<T> type,
             Map<String, Object> subcomponents,
             Item targetItem,
-            Object targetValue,
-            boolean requireDefault,
-            boolean isBan
+            boolean requireDefault
     ) {}
 
     public static final Map<String, Object> ABSURD_VALUES = Map.ofEntries(
@@ -187,68 +185,118 @@ public class DataHacker {
     // =========================================
     public static <T> void toggleRule(MinecraftServer server, String ruleId, RuleData<T> templateRule) {
         if (ACTIVE_RULES.contains(ruleId)) {
+            // ВЫКЛЮЧЕНИЕ ПРАВИЛА (Радар сам откатит забаненные шмотки)
             ACTIVE_RULES.remove(ruleId);
-            System.out.println("[DataHacker] Анбан! Накладываем компоненты на надетые вещи.");
-
-            // ЕДИНОРАЗОВЫЙ СЛЕПОК НА ЭКИПИРОВКУ ПРИ АНБАНЕ
-            RuleData<?> rule = REGISTERED_RULES.get(ruleId);
-            if (rule != null && rule.targetItem() != null) {
-                for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-                    boolean inventoryChanged = false; // Флаг для обновления инвентаря
-
-                    for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
-                        boolean isEquipped = (i == p.getInventory().getSelectedSlot()) || (i >= 36);
-                        ItemStack stack = p.getInventory().getItem(i);
-
-                        if (isEquipped && !stack.isEmpty()) {
-                            for (var typedComp : rule.targetItem().components()) {
-                                stack.set((DataComponentType) typedComp.type(), typedComp.value());
-                            }
-
-                            CustomData customData = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
-                            CompoundTag tag = customData.copyTag();
-
-                            // ==========================================
-                            // ВОТ СЮДА ВСТАВЛЯЕМ РАБОТУ С ТЕГАМИ:
-                            tag.remove("hacked_" + ruleId); // 1. Срываем старое клеймо Вируса
-                            tag.putBoolean("buffed_" + ruleId, true); // 2. Вешаем клеймо Баффа
-                            // ==========================================
-
-                            markCyberSpaced(stack);
-                            stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag)); // Сохраняем NBT
-                            inventoryChanged = true;
-                        }
-                    }
-
-                    // 2. СИНХРОНИЗИРУЕМ ИНВЕНТАРЬ (убивает баг с "дюпом" шлема)
-                    if (inventoryChanged) {
-                        p.inventoryMenu.broadcastChanges();
-                    }
-                }
-            }
+            System.out.println("[DataHacker] Правило " + ruleId + " отключено.");
+            applyOneTimeBuff(server, ruleId, templateRule);
         } else {
-            // ФАЗА ВКЛЮЧЕНИЯ
+            // ПРОВЕРКА МИРА
             boolean foundInWorld = checkComponentExists(server, templateRule);
 
-            // Пересобираем правило (6 параметров)
-            RuleData<T> finalRule = new RuleData<>(
-                    templateRule.type(),
-                    templateRule.subcomponents(),
-                    templateRule.targetItem(),
-                    templateRule.targetValue(),
-                    templateRule.requireDefault(),
-                    foundInWorld // Записываем решение: БАН или БАФФ
-            );
+            REGISTERED_RULES.put(ruleId, templateRule);
 
-            REGISTERED_RULES.put(ruleId, finalRule);
-            ACTIVE_RULES.add(ruleId);
+            // ФАЗА 1: ОБЪЕКТА НЕТ -> Выдаем бафф
+            if (!foundInWorld) {
+                System.out.println("[DataHacker] ОБЪЕКТА НЕТ: Выдаем бафф надетым вещам!");
+                applyOneTimeBuff(server, ruleId, templateRule);
+            }
+            // ФАЗА 2: ОБЪЕКТ ЕСТЬ -> Включается Радар
+            else {
+                System.out.println("[DataHacker] ОБЪЕКТ ЕСТЬ: Включаем безусловный БАН!");
+                resolveSeesawConflicts(ruleId, templateRule);
+                ACTIVE_RULES.add(ruleId);
+            }
         }
-        // Сигнал радарам перепроверить всё
         DATA_EPOCH++;
     }
 
     // =========================================
-    // ЛОКАТОР СОВПАДЕНИЙ (Облегченная версия для Разведчика)
+    // ВЫШИБАЛА (Разрешение конфликтов по качелям)
+    // =========================================
+    private static void resolveSeesawConflicts(String newRuleId, RuleData<?> newRule) {
+        if (newRule.subcomponents() == null || newRule.subcomponents().isEmpty()) return;
+
+        List<String> rulesToKill = new java.util.ArrayList<>();
+
+        // 1. Анализируем параметры нового правила
+        for (Map.Entry<String, Object> entry : newRule.subcomponents().entrySet()) {
+            String key = entry.getKey();
+            Object targetVal = entry.getValue();
+
+            Object absurdVal = ABSURD_VALUES.get(key);
+            Object invertedVal = INVERTED_VALUES.get(key);
+
+            // Если для этого ключа нет качелей - пропускаем
+            if (absurdVal == null || invertedVal == null) continue;
+
+            // 2. Вычисляем "вражеское" значение
+            Object enemyVal = null;
+            if (checkValueMatch(targetVal, absurdVal)) {
+                enemyVal = invertedVal; // Мы баним Абсурд -> ищем Инверсию
+            } else if (checkValueMatch(targetVal, invertedVal)) {
+                enemyVal = absurdVal;   // Мы баним Инверсию -> ищем Абсурд
+            }
+
+            // 3. Ищем активные правила с вражеским значением
+            if (enemyVal != null) {
+                for (String activeId : ACTIVE_RULES) {
+                    RuleData<?> activeRule = REGISTERED_RULES.get(activeId);
+                    if (activeRule != null && activeRule.subcomponents() != null) {
+                        Object activeTargetVal = activeRule.subcomponents().get(key);
+
+                        if (activeTargetVal != null && checkValueMatch(activeTargetVal, enemyVal)) {
+                            rulesToKill.add(activeId);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Убиваем найденные конфликты
+        for (String killId : rulesToKill) {
+            ACTIVE_RULES.remove(killId);
+            System.out.println("[DataHacker] Качели перевесили! Правило " + killId + " автоматически отключено в пользу " + newRuleId);
+        }
+    }
+
+    // =========================================
+    // ИНЖЕКТОР БАФФОВ (ОБЪЕКТА НЕТ)
+    // =========================================
+    public static void applyOneTimeBuff(MinecraftServer server, String ruleId, RuleData<?> rule) {
+        if (rule == null) return;
+
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            boolean inventoryChanged = false;
+
+            for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
+                boolean isEquipped = (i == p.getInventory().getSelectedSlot()) || (i >= 36);
+                ItemStack stack = p.getInventory().getItem(i);
+
+                if (isEquipped && !stack.isEmpty()) {
+                    if (rule.targetItem() != null) {
+                        for (var typedComp : rule.targetItem().components()) {
+                            stack.set((DataComponentType) typedComp.type(), typedComp.value());
+                        }
+                    } else if (rule.type() != null && rule.subcomponents() != null) {
+                        applyModifierSafe(stack, rule.type(), rule.subcomponents());
+                    }
+
+                    // Срываем клеймо бана, если оно было, и ставим маркер измененного предмета
+                    CustomData customData = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
+                    CompoundTag tag = customData.copyTag();
+                    tag.remove("hacked_" + ruleId);
+
+                    markCyberSpaced(stack);
+                    stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+                    inventoryChanged = true;
+                }
+            }
+            if (inventoryChanged) p.inventoryMenu.broadcastChanges();
+        }
+    }
+
+    // =========================================
+    // ЛОКАТОР СОВПАДЕНИЙ (Обновленный, без targetValue)
     // =========================================
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static boolean isMatch(ItemStack stack, RuleData<?> rawRule) {
@@ -256,41 +304,59 @@ public class DataHacker {
 
         // --- СЦЕНАРИЙ А: Квантовый Слепок (Предмет) ---
         if (rawRule.targetItem() != null) {
-
-            // 1. КУВАЛДА: Если !requireDefault и мы нашли донора - сразу БАН (даже если он модифицирован)
             if (!rawRule.requireDefault() && stack.is(rawRule.targetItem())) {
-                return true;
+                return true; // Кувалда
             }
 
-            // 2. ВИРУСНЫЙ ПОИСК: Проверяем, есть ли на предмете хотя бы один ванильный компонент донора
             for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
                 if (!stack.has(compType)) continue;
 
                 Object currentComponent = stack.get(compType);
                 Object defaultDonorComponent = rawRule.targetItem().components().get(compType);
 
-                // Если нашли точное совпадение ванильного слепка с текущим предметом - БАН
                 if (defaultDonorComponent != null && currentComponent.equals(defaultDonorComponent)) {
-                    return true;
+                    return true; // Вирус
                 }
             }
             return false;
         }
-        // --- СЦЕНАРИЙ Б: Точечное правило (Шаг 4 Роутера) ---
+
+        // --- СЦЕНАРИЙ Б: Точечное правило (Универсальный Стрингификатор) ---
         else if (rawRule.type() != null) {
             DataComponentType type = rawRule.type();
             if (!stack.has(type)) return false;
 
             Object currentComponent = stack.get(type);
 
-            if (rawRule.targetValue() != null) {
-                return currentComponent.equals(rawRule.targetValue());
-            } else if (rawRule.requireDefault()) {
+            // ЕСЛИ ЕСТЬ ВЛОЖЕННЫЕ ПАРАМЕТРЫ
+            if (rawRule.subcomponents() != null && !rawRule.subcomponents().isEmpty()) {
+
+                // Превращаем любой ванильный компонент (Enum, Чары, Примитив) в единую строку!
+                String currentStr = String.valueOf(currentComponent).toLowerCase();
+
+                for (Map.Entry<String, Object> entry : rawRule.subcomponents().entrySet()) {
+                    if (entry.getValue() == null) return true; // Джокер
+
+                    String reqValue = String.valueOf(entry.getValue()).toLowerCase();
+                    String reqKey = entry.getKey().toLowerCase();
+
+                    // Ищем совпадение прямо в сыром тексте компонента.
+                    // Это покроет 99% случаев (Rarity.EPIC -> "epic", Чары -> ключи и уровни)
+                    // Ищем совпадение прямо в сыром тексте компонента.
+                    if (currentStr.contains(reqValue) || currentStr.contains(reqKey)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            // ЕСЛИ SUBCOMPONENTS ПУСТ
+            if (rawRule.requireDefault()) {
                 Object defaultComponent = stack.getItem().components().get(type);
                 return defaultComponent != null && currentComponent.equals(defaultComponent);
             }
 
-            return true; // Глобальный бан компонента
+            return true;
         }
 
         return false;
@@ -473,107 +539,98 @@ public class DataHacker {
         String hackedTag = "hacked_" + ruleId;
 
         if (isActive) {
-            // ЕСЛИ МЫ СНОВА БАНИМ ПРАВИЛО - СТИРАЕМ БАФФ С ЭКИПИРОВКИ
-            String buffedTag = "buffed_" + ruleId;
-            if (tag.contains(buffedTag)) {
-                if (rawRule.targetItem() != null) {
-                    for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
-                        Object vanillaComponent = stack.getItem().components().get(compType);
-                        if (vanillaComponent != null) stack.set((DataComponentType<Object>) compType, vanillaComponent);
-                        else stack.remove(compType);
-                    }
-                }
-                unmarkCyberSpaced(stack); // <--- СТИРАЕМ КЛЕЙМО БАФФА
-                tag.remove(buffedTag);
-                changed = true;
-            }
-            // Если бирка уже висит - пропускаем (мы уже применили это правило)
             if (tag.contains(hackedTag)) return false;
 
             // ==========================================
-            // БАН (Выжигание компонентов)
+            // БЕЗУСЛОВНЫЙ БАН (Выжигание компонентов)
             // ==========================================
-            if (rawRule.isBan()) {
 
-                // --- СЦЕНАРИЙ А: Правило от Предмета ---
-                if (rawRule.targetItem() != null) {
-                    for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
-                        if (!stack.has(compType)) continue;
+            // --- СЦЕНАРИЙ А: Правило от Предмета ---
+            if (rawRule.targetItem() != null) {
+                for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
+                    if (!stack.has(compType)) continue;
 
-                        Object currentComponent = stack.get(compType);
-                        Object defaultDonorComponent = rawRule.targetItem().components().get(compType);
-                        boolean match = false;
+                    Object currentComponent = stack.get(compType);
+                    Object defaultDonorComponent = rawRule.targetItem().components().get(compType);
+                    boolean match = false;
 
-                        if (defaultDonorComponent != null && currentComponent.equals(defaultDonorComponent)) {
-                            match = true; // Вирус
-                        } else if (!rawRule.requireDefault() && stack.is(rawRule.targetItem())) {
-                            match = true; // Кувалда
-                        }
-
-                        if (match) {
-                            if (rawRule.subcomponents() == null || rawRule.subcomponents().isEmpty()) {
-                                stack.remove(compType);
-                                changed = true;
-                            } else {
-                                // ИСПОЛЬЗУЕМ БЕЗОПАСНЫЙ МОСТ К ТВОЕМУ СКАЛЬПЕЛЮ
-                                changed |= applyModifierSafe(stack, compType, rawRule.subcomponents());
-                            }
-                        }
-                    }
-                }
-                // --- СЦЕНАРИЙ Б: Точечное правило ---
-                else if (rawRule.type() != null) {
-                    DataComponentType type = rawRule.type();
-                    if (!stack.has(type)) return false;
-
-                    Object currentComponent = stack.get(type);
-                    boolean match = true;
-
-                    if (rawRule.targetValue() != null) {
-                        if (!currentComponent.equals(rawRule.targetValue())) match = false;
-                    } else if (rawRule.requireDefault()) {
-                        Object defaultComponent = stack.getItem().components().get(type);
-                        if (defaultComponent == null || !currentComponent.equals(defaultComponent)) match = false;
+                    if (defaultDonorComponent != null && currentComponent.equals(defaultDonorComponent)) {
+                        match = true;
+                    } else if (!rawRule.requireDefault() && stack.is(rawRule.targetItem())) {
+                        match = true;
                     }
 
                     if (match) {
                         if (rawRule.subcomponents() == null || rawRule.subcomponents().isEmpty()) {
-                            stack.remove(type);
+                            stack.remove(compType);
                             changed = true;
                         } else {
-                            // ИСПОЛЬЗУЕМ БЕЗОПАСНЫЙ МОСТ К ТВОЕМУ СКАЛЬПЕЛЮ
-                            changed |= applyModifierSafe(stack, type, rawRule.subcomponents());
+                            // Скальпель сам всё проверит и изменит
+                            ModResult result = modifySubcomponents(currentComponent, rawRule.subcomponents());
+                            if (result.isModified()) {
+                                stack.set(compType, result.component());
+                                changed = true;
+                            }
                         }
                     }
                 }
+            }
+            // --- СЦЕНАРИЙ Б: Точечное правило ---
+            else if (rawRule.type() != null) {
+                DataComponentType type = rawRule.type();
+                if (!stack.has(type)) return false;
 
-                if (changed) {
-                    markCyberSpaced(stack); // <--- КЛЕЙМИМ ПРЕДМЕТ!
-                    tag.putBoolean(hackedTag, true);
+                Object currentComponent = stack.get(type);
+
+                // ЕСЛИ ЕСТЬ ВЛОЖЕННЫЕ ПАРАМЕТРЫ -> ОТДАЕМ ВСЁ СКАЛЬПЕЛЮ
+                if (rawRule.subcomponents() != null && !rawRule.subcomponents().isEmpty()) {
+                    ModResult result = modifySubcomponents(currentComponent, rawRule.subcomponents());
+                    if (result.isModified()) {
+                        stack.set(type, result.component());
+                        changed = true;
+                    }
+
+                }
+                // ЕСЛИ SUBCOMPONENTS ПУСТ (Глобальный бан или проверка дефолта)
+                else {
+                    if (rawRule.requireDefault()) {
+                        Object defaultComponent = stack.getItem().components().get(type);
+                        if (defaultComponent != null && currentComponent.equals(defaultComponent)) {
+                            stack.remove(type);
+                            changed = true;
+                        }
+                    } else {
+                        stack.remove(type); // Глобальный бан компонента
+                        changed = true;
+                    }
                 }
             }
+
+            if (changed) {
+                markCyberSpaced(stack);
+                tag.putBoolean(hackedTag, true);
+            }
+
         }
         // ==========================================
-        // ОТКАТ (Фаза 1 в processItemStack)
+        // ОТКАТ
         // ==========================================
         else {
             if (tag.contains(hackedTag)) {
                 if (rawRule.targetItem() != null) {
                     for (DataComponentType compType : rawRule.targetItem().components().keySet()) {
                         Object vanillaComponent = stack.getItem().components().get(compType);
-                        // ДОБАВИЛ КАСТ (DataComponentType<Object>)
                         if (vanillaComponent != null) stack.set((DataComponentType<Object>) compType, vanillaComponent);
                         else stack.remove(compType);
                     }
                 } else if (rawRule.type() != null) {
                     DataComponentType type = rawRule.type();
                     Object vanillaComponent = stack.getItem().components().get(type);
-                    // ДОБАВИЛ КАСТ (DataComponentType<Object>)
                     if (vanillaComponent != null) stack.set((DataComponentType<Object>) type, vanillaComponent);
                     else stack.remove(type);
                 }
 
-                unmarkCyberSpaced(stack); // <--- СТИРАЕМ КЛЕЙМО БАНА
+                unmarkCyberSpaced(stack);
                 tag.remove(hackedTag);
                 changed = true;
             }

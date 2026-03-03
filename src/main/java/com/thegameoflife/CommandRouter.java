@@ -61,9 +61,7 @@ public class CommandRouter {
                             null,          // type: null (applyRule сам переберет все компоненты донора)
                             null,          // subcomponents: null
                             targetItem,    // targetItem: наш донор (Алмазный меч)
-                            null,          // targetValue: null (applyRule возьмет значения из чертежа)
-                            reqDefault,    // reqDefault: решает, будет ли это только Вирус или Вирус + Кувалда
-                            false          // isBan: заглушка (toggleRule сам решит, бан это или бафф)
+                            reqDefault    // reqDefault: решает, будет ли это только Вирус или Вирус + Кувалда
                     );
 
                     toggleRule(server, ruleId, snapshotRule);
@@ -87,9 +85,7 @@ public class CommandRouter {
                         compCtx.type(),
                         compCtx.subcomponents(),
                         null,       // targetItem: нет донора, правило глобальное
-                        null,       // targetValue: нет конкретного значения
-                        reqDefault,
-                        false       // isBan: заглушка
+                        reqDefault
                 );
 
                 toggleRule(server, compCtx.ruleName(), rule);
