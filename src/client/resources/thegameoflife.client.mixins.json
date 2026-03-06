@@ -1,6 +1,6 @@
 {
 	"required": true,
-	"package": "com.thegameoflife.mixin.client",
+	"package": "com.cyberspace.mixin.client",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"TheGameOfLIfeMixin"

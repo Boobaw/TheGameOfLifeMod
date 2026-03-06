@@ -17,10 +17,10 @@
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.thegameoflife.TheGameOfLifeMod"
+			"com.cyberspace.CyberSpaceMod"
 		],
 		"client": [
-			"com.thegameoflife.TheGameOfLifeClient"
+			"com.cyberspace.CyberSpaceModClient"
 		]
 	},
 	"mixins": [
