@@ -40,774 +40,629 @@
       "armor": {
         "stt_hints": ["броня", "защита", "панцирь"],
         "entry_points": [ ["брон"], ["защит"], ["панцир"] ],
-        "exit_points": {
-          "attribute": "minecraft:armor",
-          "absurd_val": -30.0,
-          "inverted_val": 30.0
-        }
+        "exit_points": { "attribute": "minecraft:armor", "absurd_val": -30.0 }
       },
       "armor_toughness": {
         "stt_hints": ["твердость брони", "пробитие"],
         "entry_points": [ ["твердост"], ["пробит"] ],
-        "exit_points": {
-          "attribute": "minecraft:armor_toughness",
-          "absurd_val": -20.0,
-          "inverted_val": 20.0
-        }
+        "exit_points": { "attribute": "minecraft:armor_toughness", "absurd_val": -20.0 }
       },
       "attack_damage": {
         "stt_hints": ["сила удара", "урон", "дамаг"],
         "entry_points": [ ["урон"], ["сил", "удар"], ["дамаг"] ],
-        "exit_points": {
-          "attribute": "minecraft:attack_damage",
-          "absurd_val": -2048.0,
-          "inverted_val": 2048.0
-        }
+        "exit_points": { "attribute": "minecraft:attack_damage", "absurd_val": -2048.0 }
       },
       "attack_knockback": {
         "stt_hints": ["отбрасывание", "сила отдачи"],
         "entry_points": [ ["отбрасыван"], ["отдач"] ],
-        "exit_points": {
-          "attribute": "minecraft:attack_knockback",
-          "absurd_val": -5.0,
-          "inverted_val": 5.0
-        }
+        "exit_points": { "attribute": "minecraft:attack_knockback", "absurd_val": -5.0 }
       },
       "attack_speed": {
         "stt_hints": ["скорость атаки", "кулдаун"],
         "entry_points": [ ["скорост", "атак"], ["кулдаун"], ["взмах"] ],
-        "exit_points": {
-          "attribute": "minecraft:attack_speed",
-          "absurd_val": 1024.0,
-          "inverted_val": -1024.0
-        }
+        "exit_points": { "attribute": "minecraft:attack_speed", "absurd_val": 1024.0 }
       },
       "block_break_speed": {
         "stt_hints": ["скорость копания", "бур"],
         "entry_points": [ ["копан"], ["скорост", "блок"], ["бур"] ],
-        "exit_points": {
-          "attribute": "minecraft:block_break_speed",
-          "absurd_val": -1024.0,
-          "inverted_val": 1024.0
-        }
+        "exit_points": { "attribute": "minecraft:block_break_speed", "absurd_val": -1024.0 }
       },
       "block_interaction_range": {
         "stt_hints": ["дальность ломания", "дистанция блоков"],
         "entry_points": [ ["дальност", "блок"], ["дистанц", "блок"], ["рук"] ],
-        "exit_points": {
-          "attribute": "minecraft:block_interaction_range",
-          "absurd_val": -64.0,
-          "inverted_val": 64.0
-        }
+        "exit_points": { "attribute": "minecraft:block_interaction_range", "absurd_val": -64.0 }
       },
       "burning_time": {
         "stt_hints": ["время горения", "огонь", "пожар"],
         "entry_points": [ ["горен"], ["огон"], ["пожар"] ],
-        "exit_points": {
-          "attribute": "minecraft:burning_time",
-          "absurd_val": -1.0,
-          "inverted_val": 1024.0
-        }
+        "exit_points": { "attribute": "minecraft:burning_time", "absurd_val": -1.0 }
       },
       "camera_distance": {
         "stt_hints": ["отдаление камеры", "камера"],
         "entry_points": [ ["камер"], ["отдален"] ],
-        "exit_points": {
-          "attribute": "minecraft:camera_distance",
-          "absurd_val": -32.0,
-          "inverted_val": 32.0
-        }
+        "exit_points": { "attribute": "minecraft:camera_distance", "absurd_val": -32.0 }
       },
       "explosion_knockback_resistance": {
         "stt_hints": ["сопротивление взрывам", "отдача от крипера"],
         "entry_points": [ ["сопротивлен", "взрыв"], ["взрыв", "отдач"] ],
-        "exit_points": {
-          "attribute": "minecraft:explosion_knockback_resistance",
-          "absurd_val": -1.0,
-          "inverted_val": 1.0
-        }
+        "exit_points": { "attribute": "minecraft:explosion_knockback_resistance", "absurd_val": -1.0 }
       },
       "entity_interaction_range": {
         "stt_hints": ["дальность удара", "дистанция мобов"],
         "entry_points": [ ["дальност", "моб"], ["дистанц", "моб"], ["удар"] ],
-        "exit_points": {
-          "attribute": "minecraft:entity_interaction_range",
-          "absurd_val": -64.0,
-          "inverted_val": 64.0
-        }
+        "exit_points": { "attribute": "minecraft:entity_interaction_range", "absurd_val": -64.0 }
       },
       "fall_damage_multiplier": {
         "stt_hints": ["множитель падения", "урон от падения"],
         "entry_points": [ ["множител", "паден"], ["хрупкост"] ],
-        "exit_points": {
-          "attribute": "minecraft:fall_damage_multiplier",
-          "absurd_val": -1.0,
-          "inverted_val": 100.0
-        }
+        "exit_points": { "attribute": "minecraft:fall_damage_multiplier", "absurd_val": -1.0 }
       },
       "flying_speed": {
         "stt_hints": ["скорость полета", "элитры"],
         "entry_points": [ ["скорост", "полет"], ["элитр"] ],
-        "exit_points": {
-          "attribute": "minecraft:flying_speed",
-          "absurd_val": -1024.0,
-          "inverted_val": 1024.0
-        }
+        "exit_points": { "attribute": "minecraft:flying_speed", "absurd_val": -1024.0 }
       },
       "follow_range": {
         "stt_hints": ["радиус агра", "преследование", "нюх"],
         "entry_points": [ ["радиус", "агр"], ["преследован"], ["нюх"] ],
-        "exit_points": {
-          "attribute": "minecraft:follow_range",
-          "absurd_val": -2048.0,
-          "inverted_val": 2048.0
-        }
+        "exit_points": { "attribute": "minecraft:follow_range", "absurd_val": -2048.0 }
       },
       "gravity": {
         "stt_hints": ["гравитация", "притяжение", "вес"],
         "entry_points": [ ["гравитац"], ["притяжен"], ["вес"] ],
-        "exit_points": {
-          "attribute": "minecraft:gravity",
-          "absurd_val": -0.08,
-          "inverted_val": 1.0
-        }
+        "exit_points": { "attribute": "minecraft:gravity", "absurd_val": -0.08 }
       },
       "jump_strength": {
         "stt_hints": ["сила прыжка", "высота полета"],
         "entry_points": [ ["прыжок"], ["прыжк"] ],
-        "exit_points": {
-          "attribute": "minecraft:jump_strength",
-          "absurd_val": -32.0,
-          "inverted_val": 32.0
-        }
+        "exit_points": { "attribute": "minecraft:jump_strength", "absurd_val": -32.0 }
       },
       "knockback_resistance": {
         "stt_hints": ["стойкость", "антиотдача", "масса"],
         "entry_points": [ ["стойкост"], ["антиотдач"], ["масс"] ],
-        "exit_points": {
-          "attribute": "minecraft:knockback_resistance",
-          "absurd_val": -1.0,
-          "inverted_val": 1.0
-        }
+        "exit_points": { "attribute": "minecraft:knockback_resistance", "absurd_val": -1.0 }
       },
       "luck": {
         "stt_hints": ["удача", "фортуна", "везение"],
         "entry_points": [ ["удач"], ["фортун"], ["везен"] ],
-        "exit_points": {
-          "attribute": "minecraft:luck",
-          "absurd_val": -1024.0,
-          "inverted_val": 1024.0
-        }
+        "exit_points": { "attribute": "minecraft:luck", "absurd_val": -1024.0 }
       },
       "max_absorption": {
         "stt_hints": ["поглощение", "желтые сердца"],
         "entry_points": [ ["поглощен"], ["желт", "сердц"] ],
-        "exit_points": {
-          "attribute": "minecraft:max_absorption",
-          "absurd_val": -2048.0,
-          "inverted_val": 2048.0
-        }
+        "exit_points": { "attribute": "minecraft:max_absorption", "absurd_val": -2048.0 }
       },
       "max_health": {
         "stt_hints": ["максимальное здоровье", "жизни"],
         "entry_points": [ ["здоровь"], ["жизн"], ["хп"] ],
-        "exit_points": {
-          "attribute": "minecraft:max_health",
-          "absurd_val": -19.0,
-          "inverted_val": 1004.0
-        }
+        "exit_points": { "attribute": "minecraft:max_health", "absurd_val": -19.0 }
       },
       "mining_efficiency": {
         "stt_hints": ["эффективность добычи", "шахтер"],
         "entry_points": [ ["эффективност"], ["добыч"], ["шахтер"] ],
-        "exit_points": {
-          "attribute": "minecraft:mining_efficiency",
-          "absurd_val": -1024.0,
-          "inverted_val": 1024.0
-        }
+        "exit_points": { "attribute": "minecraft:mining_efficiency", "absurd_val": -1024.0 }
       },
       "movement_speed": {
         "stt_hints": ["скорость бега", "темп", "ускорение"],
-        "entry_points": [ ["скорост", "бег"], ["темп"], ["ускорен"] ],
-        "exit_points": {
-          "attribute": "minecraft:movement_speed",
-          "absurd_val": -1.0,
-          "inverted_val": 10.0
-        }
+        "entry_points": [ ["скорост", "бег"], ["бег"], ["темп"], ["ускорен"] ],
+        "exit_points": { "attribute": "minecraft:movement_speed", "absurd_val": -1.0 }
       },
       "oxygen_bonus": {
         "stt_hints": ["задержка дыхания", "кислород", "жабры"],
         "entry_points": [ ["дыхан"], ["кислород"], ["жабр"] ],
-        "exit_points": {
-          "attribute": "minecraft:oxygen_bonus",
-          "absurd_val": -1024.0,
-          "inverted_val": 1024.0
-        }
+        "exit_points": { "attribute": "minecraft:oxygen_bonus", "absurd_val": -1024.0 }
       },
       "safe_fall_distance": {
         "stt_hints": ["урон от падения", "безопасное падение"],
         "entry_points": [ ["урон", "паден"], ["кост"] ],
-        "exit_points": {
-          "attribute": "minecraft:safe_fall_distance",
-          "absurd_val": -1024.0,
-          "inverted_val": 1024.0
-        }
+        "exit_points": { "attribute": "minecraft:safe_fall_distance", "absurd_val": -1024.0 }
       },
       "scale": {
         "stt_hints": ["размер", "рост", "габариты"],
         "entry_points": [ ["размер"], ["рост"], ["габарит"] ],
-        "exit_points": {
-          "attribute": "minecraft:scale",
-          "absurd_val": -0.9375,
-          "inverted_val": 15.0
-        }
+        "exit_points": { "attribute": "minecraft:scale", "absurd_val": -0.9375 }
       },
       "sneaking_speed": {
         "stt_hints": ["скорость на шифте", "стелс"],
         "entry_points": [ ["шифт"], ["стелс"], ["присед"] ],
-        "exit_points": {
-          "attribute": "minecraft:sneaking_speed",
-          "absurd_val": -1.0,
-          "inverted_val": 1.0
-        }
+        "exit_points": { "attribute": "minecraft:sneaking_speed", "absurd_val": -1.0 }
       },
       "spawn_reinforcements_chance": {
         "stt_hints": ["подмога зомби", "подкрепление", "орда"],
         "entry_points": [ ["подмог"], ["подкреплен"], ["орд"] ],
-        "exit_points": {
-          "attribute": "minecraft:spawn_reinforcements",
-          "absurd_val": -1.0,
-          "inverted_val": 1.0
-        }
+        "exit_points": { "attribute": "minecraft:spawn_reinforcements", "absurd_val": -1.0 }
       },
       "step_height": {
         "stt_hints": ["высота шага", "спотыкач", "паркур"],
         "entry_points": [ ["шаг"], ["подъем"], ["барьер"] ],
-        "exit_points": {
-          "attribute": "minecraft:step_height",
-          "absurd_val": -10.0,
-          "inverted_val": 10.0
-        }
+        "exit_points": { "attribute": "minecraft:step_height", "absurd_val": -10.0 }
       },
       "submerged_mining_speed": {
         "stt_hints": ["копание под водой", "аква"],
         "entry_points": [ ["копан", "вод"], ["акв"] ],
-        "exit_points": {
-          "attribute": "minecraft:submerged_mining_speed",
-          "absurd_val": -20.0,
-          "inverted_val": 20.0
-        }
+        "exit_points": { "attribute": "minecraft:submerged_mining_speed", "absurd_val": -20.0 }
       },
       "sweeping_damage_ratio": {
         "stt_hints": ["размашистый удар", "сплеш"],
         "entry_points": [ ["размашист"], ["сплеш"] ],
-        "exit_points": {
-          "attribute": "minecraft:sweeping_damage_ratio",
-          "absurd_val": -1.0,
-          "inverted_val": 1.0
-        }
+        "exit_points": { "attribute": "minecraft:sweeping_damage_ratio", "absurd_val": -1.0 }
       },
       "tempt_range": {
         "stt_hints": ["радиус приманивания", "кормежка"],
         "entry_points": [ ["приманиван"], ["кормежк"] ],
-        "exit_points": {
-          "attribute": "minecraft:tempt_range",
-          "absurd_val": -2048.0,
-          "inverted_val": 2048.0
-        }
+        "exit_points": { "attribute": "minecraft:tempt_range", "absurd_val": -2048.0 }
       },
       "water_movement_efficiency": {
         "stt_hints": ["скорость в воде", "плавание"],
         "entry_points": [ ["скорост", "вод"], ["плаван"] ],
-        "exit_points": {
-          "attribute": "minecraft:water_movement_efficiency",
-          "absurd_val": -1.0,
-          "inverted_val": 1.0
-        }
+        "exit_points": { "attribute": "minecraft:water_movement_efficiency", "absurd_val": -1.0 }
       },
       "waypoint_transmit_range": {
         "stt_hints": ["дальность радара", "сигнал"],
         "entry_points": [ ["дальност", "радар"], ["сигнал"] ],
-        "exit_points": {
-          "attribute": "minecraft:waypoint_transmit_range",
-          "absurd_val": -60000000.0,
-          "inverted_val": 60000000.0
-        }
+        "exit_points": { "attribute": "minecraft:waypoint_transmit_range", "absurd_val": -60000000.0 }
       },
       "waypoint_receive_range": {
         "stt_hints": ["прием радара", "локатор"],
         "entry_points": [ ["прием", "радар"], ["локатор"] ],
-        "exit_points": {
-          "attribute": "minecraft:waypoint_receive_range",
-          "absurd_val": -60000000.0,
-          "inverted_val": 60000000.0
-        }
+        "exit_points": { "attribute": "minecraft:waypoint_receive_range", "absurd_val": -60000000.0 }
       }
     },
 
-    "//": "ДАННЫЕ СУЩНОСТЕЙ: Базовые NBT-подобные флаги (работают на всё неживое и живое)",
-    "entity_flags": {
-      "ban_kinetic_energy": {
-        "stt_hints": ["кинетическая энергия", "импульс", "ускорение"],
-        "entry_points": [ ["кинетическ"], ["импульс"], ["ускорени"] ],
-        "exit_points": { "flag": "ban_kinetic_energy", "absurd_val": 1.0, "inverted_val": 0.0 }
+    "//": "ФЛАГИ: Состояния сущностей, живых существ, игроков и сети",
+    "flags": {
+      "//": "АТОМЫ: Минимальные неделимые единицы состояния",
+      "no_gravity": {
+        "stt_hints": ["антигравитация", "парение", "левитация"],
+        "entry_points": [ ["антигравитац"], ["парен"], ["левитац"] ],
+        "exit_points": { "flag": "no_gravity" }
       },
-      "ban_gravity": {
-        "stt_hints": ["гравитация", "притяжение", "вес"],
-        "entry_points": [ ["гравитаци"], ["притяжени"], ["вес"] ],
-        "exit_points": { "flag": "ban_gravity", "absurd_val": 1.0, "inverted_val": 0.0 }
+      "zero_momentum": {
+        "stt_hints": ["нулевой импульс", "обнуление скорости"],
+        "entry_points": [ ["нулев", "импульс"], ["обнулен", "скорост"] ],
+        "exit_points": { "flag": "zero_momentum" }
       },
+      "no_physics": {
+        "stt_hints": ["коллизия", "физика", "призрак"],
+        "entry_points": [ ["коллизи"], ["физик"], ["сквозь", "стен"], ["призрак"] ],
+        "exit_points": { "flag": "no_physics" }
+      },
+      "no_muscles": {
+        "stt_hints": ["мышцы", "способность ходить"],
+        "entry_points": [ ["мышц"], ["способност", "ходит"] ],
+        "exit_points": { "flag": "no_muscles" }
+      },
+      "no_jump": {
+        "stt_hints": ["прыжок", "толчок"],
+        "entry_points": [ ["прыжок"], ["прыжк"], ["толчок"] ],
+        "exit_points": { "flag": "no_jump" }
+      },
+      "no_flying": {
+        "stt_hints": ["скорость полета", "летная скорость"],
+        "entry_points": [ ["летн", "скорост"] ],
+        "exit_points": { "flag": "no_flying" }
+      },
+      "no_knockback": {
+        "stt_hints": ["нокбэк", "отдача", "отбрасывание"],
+        "entry_points": [ ["нокбэк"], ["отдач"], ["отбрасыван"] ],
+        "exit_points": { "flag": "no_knockback" }
+      },
+
+      "//": "СОСТАВНЫЕ ОБЪЕКТЫ: Группы атомов",
       "ban_movement": {
-        "stt_hints": ["движение", "кинетика", "паралич"],
-        "entry_points": [ ["движени"], ["кинетик"], ["паралич"] ],
-        "exit_points": { "flag": "ban_movement", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "stt_hints": ["движение", "заморозка", "паралич", "кинетика"],
+        "entry_points": [ ["движени"], ["заморозк"], ["паралич"], ["кинетик"] ],
+        "exit_points": {
+          "atoms": ["no_gravity", "zero_momentum", "no_physics", "no_muscles", "no_jump", "no_flying", "no_knockback"],
+          "attr_atoms": ["movement_speed"]
+        }
       },
       "ban_speed_limit": {
         "stt_hints": ["лимит скорости", "сопротивление", "максимальная скорость"],
-        "entry_points": [ ["лимит"], ["максимальн", "скорост"], ["сопротивлени"] ],
-        "exit_points": { "flag": "ban_speed_limit", "absurd_val": 1.0, "inverted_val": 0.0 }
-    },
-      "gravity": {
-        "stt_hints": ["гравитация", "притяжение", "вес"],
-        "entry_points": [ ["гравитац"], ["притяжен"], ["вес"] ],
-        "exit_points": { "flag": "no_gravity", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["лимит", "скорост"], ["максимальн", "скорост"], ["сопротивлени"] ],
+        "exit_points": { "flag": "ban_speed_limit", "absurd_val": 1.0 }
       },
-      "physics": {
-        "stt_hints": ["коллизия", "ноунлип", "призрак"],
-        "entry_points": [ ["коллизи"], ["физик"], ["сквозь", "стен"], ["призрак"] ],
-        "exit_points": { "flag": "no_physics", "absurd_val": 1.0, "inverted_val": 0.0 }
-      },
+
+      "//": "ВИЗУАЛЬНЫЕ И ИГРОВЫЕ ЭФФЕКТЫ",
       "glowing": {
         "stt_hints": ["свечение", "вх", "рентген"],
         "entry_points": [ ["свечен"], ["рентген"], ["подсветк"] ],
-        "exit_points": { "flag": "glowing", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "glowing" }
       },
       "invisibility": {
         "stt_hints": ["невидимость", "стелс", "инвиз"],
         "entry_points": [ ["невидим"], ["инвиз"], ["стелс"] ],
-        "exit_points": { "flag": "invisible", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "invisible" }
       },
       "invulnerability": {
         "stt_hints": ["бессмертие", "неуязвимость", "режим бога"],
         "entry_points": [ ["бессмерт"], ["неуязвим"], ["бог"] ],
-        "exit_points": { "flag": "invulnerable", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "invulnerable" }
       },
       "silence": {
         "stt_hints": ["тишина", "без звука", "немота"],
         "entry_points": [ ["тишин"], ["звук"], ["немот"], ["глухот"] ],
-        "exit_points": { "flag": "silent", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "silent" }
       },
       "fire": {
         "stt_hints": ["огонь", "горение", "пожар"],
         "entry_points": [ ["огон"], ["горен"], ["пожар"], ["плам"] ],
-        "exit_points": { "flag": "fire_ticks", "absurd_val": 32767.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "fire_ticks", "absurd_val": 32767.0 }
       },
       "freeze": {
         "stt_hints": ["обморожение", "лед", "холод"],
         "entry_points": [ ["обморожен"], ["лед"], ["холод"], ["замороз"] ],
-        "exit_points": { "flag": "freeze_ticks", "absurd_val": 32767.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "freeze_ticks", "absurd_val": 32767.0 }
       },
       "breath": {
         "stt_hints": ["дыхание", "кислород", "удушье"],
         "entry_points": [ ["дыхан"], ["кислород"], ["удушь"], ["воздух"] ],
-        "exit_points": { "flag": "air_supply", "absurd_val": -100.0, "inverted_val": 300.0 }
+        "exit_points": { "flag": "air_supply", "absurd_val": -100.0 }
       },
       "animation_crouch": {
         "stt_hints": ["присед", "шифт", "карлики"],
         "entry_points": [ ["присед"], ["шифт"], ["карлик"] ],
-        "exit_points": { "flag": "sneaking", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "sneaking" }
       },
       "animation_swim": {
         "stt_hints": ["плавание", "ползание", "черви"],
         "entry_points": [ ["плаван"], ["ползан"], ["черв"], ["змей"] ],
-        "exit_points": { "flag": "swimming", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "swimming" }
       },
       "fall_trap": {
         "stt_hints": ["урон от падения", "стеклянные ноги", "гравитационный удар"],
         "entry_points": [ ["урон", "паден"], ["стеклян", "ног"], ["хрустал"] ],
-        "exit_points": { "flag": "fall_distance", "absurd_val": 1000.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "fall_distance", "absurd_val": 1000.0 }
       },
       "portal_lock": {
         "stt_hints": ["закрытие порталов", "якорь", "измерения"],
         "entry_points": [ ["портал"], ["измерен"], ["якорь"] ],
-        "exit_points": { "flag": "portal_cooldown", "absurd_val": 32000.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "portal_cooldown", "absurd_val": 32000.0 }
       },
       "powder_snow": {
         "stt_hints": ["рыхлый снег", "сугроб", "вязкость"],
         "entry_points": [ ["снег"], ["сугроб"], ["вязкост"] ],
-        "exit_points": { "flag": "powder_snow", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "powder_snow" }
       },
       "solid_loot": {
         "stt_hints": ["твердый лут", "блокировка строительства", "мусор"],
         "entry_points": [ ["тверд", "лут"], ["мусор"], ["блокир", "строй"] ],
-        "exit_points": { "flag": "blocks_building", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "blocks_building" }
       },
       "cobweb_curse": {
         "stt_hints": ["вязкость", "паутина", "замедление времени"],
-        "entry_points": [ ["вязкост"], ["паутин"], ["замедлен", "времен"] ],
-        "exit_points": { "flag": "stuck_in_web", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["паутин"], ["замедлен", "времен"] ],
+        "exit_points": { "flag": "stuck_in_web" }
       },
       "jump_paralysis": {
         "stt_hints": ["паралич прыжка", "скольжение", "без ног"],
-        "entry_points": [ ["паралич"], ["прыжк"], ["скольжен"] ],
-        "exit_points": { "flag": "force_not_on_ground", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["скольжен"] ],
+        "exit_points": { "flag": "force_not_on_ground" }
       },
       "pacifist_curse": {
         "stt_hints": ["пацифист", "вечные айфреймы", "уклонение"],
         "entry_points": [ ["пацифист"], ["уклонен"], ["щит"] ],
-        "exit_points": { "flag": "force_iframes", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "force_iframes" }
       },
       "elytra_epidemic": {
         "stt_hints": ["полет", "элитры", "скольжение на пузе"],
-        "entry_points": [ ["элитр"], ["пуз"], ["змей"] ],
-        "exit_points": { "flag": "force_elytra_pose", "absurd_val": 1.0, "inverted_val": 0.0 }
-      },
-      "absolute_stasis": {
-        "stt_hints": ["инерция", "импульс", "кинетика"],
-        "entry_points": [ ["инерци"], ["импульс"], ["кинетик"], ["отбрасыван"] ],
-        "exit_points": { "flag": "force_stasis", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["элитр"], ["пуз"] ],
+        "exit_points": { "flag": "force_elytra_pose" }
       },
       "anti_vehicle": {
         "stt_hints": ["транспорт", "седло", "поездка"],
         "entry_points": [ ["транспорт"], ["седл"], ["поездк"], ["лошад"] ],
-        "exit_points": { "flag": "force_dismount", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "force_dismount" }
       },
       "identity_erasure": {
         "stt_hints": ["имена", "бирки", "личность"],
         "entry_points": [ ["имен"], ["бирк"], ["личност"], ["прозвищ"] ],
-        "exit_points": { "flag": "erase_names", "absurd_val": 1.0, "inverted_val": 0.0 }
-      }
-    },
-
-    "//": "ДАННЫЕ ЖИВЫХ СУЩЕСТВ: Эффекты, здоровье, ИИ (LivingEntity)",
-    "living_flags": {
-      "ban_speed_limit": {
-        "stt_hints": ["лимит скорости", "максимальная скорость"],
-        "entry_points": [ ["лимит"], ["максимальн", "скорост"] ],
-        "exit_points": { "flag": "ban_speed_limit", "absurd_val": 1.0, "inverted_val": 0.0 }
-      },
-      "ban_muscles": {
-        "stt_hints": ["мышцы", "шаг", "способность ходить"],
-        "entry_points": [ ["мышц"], ["шаг"], ["способност", "ходит"] ],
-        "exit_points": { "flag": "ban_muscles", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "erase_names" }
       },
       "health_concept": {
         "stt_hints": ["здоровье", "жизнь"],
         "entry_points": [ ["здоровь"], ["жизн"] ],
-        "exit_points": { "flag": "ban_health", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_health" }
       },
       "absorption_concept": {
         "stt_hints": ["поглощение", "щит", "золотые сердца"],
-        "entry_points": [ ["поглощен"], ["щит"], ["золот", "сердц"] ],
-        "exit_points": { "flag": "ban_absorption", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["поглощен"], ["золот", "сердц"] ],
+        "exit_points": { "flag": "ban_absorption" }
       },
       "usage_concept": {
         "stt_hints": ["использование", "применение", "еда"],
         "entry_points": [ ["использован"], ["применен"], ["еда"], ["аппетит"] ],
-        "exit_points": { "flag": "ban_usage", "absurd_val": 1.0, "inverted_val": 0.0 }
-      },
-      "jump_concept": {
-        "stt_hints": ["прыжок", "толчок"],
-        "entry_points": [ ["прыжок"], ["прыжк"], ["толчок"] ],
-        "exit_points": { "flag": "ban_jump", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_usage" }
       },
       "swing_concept": {
         "stt_hints": ["удар", "взмах", "атака"],
         "entry_points": [ ["удар"], ["взмах"], ["атак"] ],
-        "exit_points": { "flag": "ban_swing", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_swing" }
       },
       "mind_concept": {
         "stt_hints": ["разум", "мозг", "интеллект"],
         "entry_points": [ ["разум"], ["мозг"], ["интеллект"] ],
-        "exit_points": { "flag": "ban_mind", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_mind" }
       },
       "memory_concept": {
         "stt_hints": ["память", "агрессия", "обида"],
         "entry_points": [ ["памят"], ["агресси"], ["обид"], ["вражд"] ],
-        "exit_points": { "flag": "ban_memory", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_memory" }
       },
       "pain_concept": {
         "stt_hints": ["боль", "страдание"],
         "entry_points": [ ["бол"], ["страдани"] ],
-        "exit_points": { "flag": "buff_pain", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "buff_pain" }
       },
       "death_concept": {
         "stt_hints": ["смерть", "труп"],
         "entry_points": [ ["смерт"], ["труп"] ],
-        "exit_points": { "flag": "buff_death", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "buff_death" }
       },
       "arrow_concept": {
         "stt_hints": ["стрелы в теле", "оперение"],
         "entry_points": [ ["стрел", "тел"], ["оперени"] ],
-        "exit_points": { "flag": "buff_arrows", "absurd_val": 100.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "buff_arrows", "absurd_val": 100.0 }
       },
       "stinger_concept": {
         "stt_hints": ["жала", "пчелиный яд"],
         "entry_points": [ ["жал"], ["пчелин", "яд"] ],
-        "exit_points": { "flag": "buff_stingers", "absurd_val": 100.0, "inverted_val": 0.0 }
-      }
-    },
-
-    "//": "КОНЦЕПЦИИ ИГРОКА: Опыт, Голод, Права (ServerPlayer)",
-    "player_flags": {
+        "exit_points": { "flag": "buff_stingers", "absurd_val": 100.0 }
+      },
       "ban_knowledge": {
         "stt_hints": ["опыт", "знания", "уровни", "амнезия"],
         "entry_points": [ ["опыт"], ["знани"], ["уровн"], ["амнези"] ],
-        "exit_points": { "flag": "ban_experience", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_experience" }
       },
       "ban_satiety": {
         "stt_hints": ["сытость", "голод", "истощение"],
         "entry_points": [ ["сытост"], ["голод"], ["истощен"] ],
-        "exit_points": { "flag": "ban_satiety", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_satiety" }
       },
       "ban_exhaustion": {
         "stt_hints": ["усталость", "энергия", "выносливость"],
         "entry_points": [ ["усталост"], ["энерги"], ["выносливост"] ],
-        "exit_points": { "flag": "ban_exhaustion", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_exhaustion" }
       },
       "ban_creation": {
         "stt_hints": ["созидание", "строительство", "разрушение блоков"],
         "entry_points": [ ["созидан"], ["строй"], ["разрушен"], ["блок"] ],
-        "exit_points": { "flag": "ban_build_ability", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_build_ability" }
       },
       "ban_navigation": {
         "stt_hints": ["навигация", "координаты", "компас"],
         "entry_points": [ ["навигаци"], ["координат"], ["ф3"] ],
-        "exit_points": { "flag": "ban_coords", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_coords" }
       },
       "ban_xp_pickup": {
         "stt_hints": ["усвоение", "сбор опыта", "неприкасаемость"],
         "entry_points": [ ["усвоени"], ["сбор", "опыт"], ["неприкасаемост"] ],
-        "exit_points": { "flag": "ban_xp_pickup", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_xp_pickup" }
       },
       "ban_rest": {
         "stt_hints": ["сон", "покой", "бессонница"],
         "entry_points": [ ["сон"], ["покой"], ["бессонниц"], ["кроват"] ],
-        "exit_points": { "flag": "ban_sleep", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_sleep" }
       },
       "buff_ascension": {
         "stt_hints": ["вознесение", "полет", "крылья"],
-        "entry_points": [ ["вознесен"], ["полет"], ["крыль"] ],
-        "exit_points": { "flag": "force_flight", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["вознесен"], ["крыль"] ],
+        "exit_points": { "flag": "force_flight" }
       },
       "ban_possession": {
         "stt_hints": ["собственность", "имущество", "пустые карманы"],
         "entry_points": [ ["собственност"], ["имуществ"], ["карманы"] ],
-        "exit_points": { "flag": "ban_possession", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_possession" }
       },
       "ban_vanity": {
         "stt_hints": ["тщеславие", "очки", "счет"],
         "entry_points": [ ["тщеслави"], ["счет"], ["очки"] ],
-        "exit_points": { "flag": "ban_vanity", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_vanity" }
       },
       "ban_symbiosis": {
         "stt_hints": ["симбиоз", "питомцы", "одиночество"],
         "entry_points": [ ["симбиоз"], ["питомц"], ["одиночеств"] ],
-        "exit_points": { "flag": "ban_companions", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_companions" }
       },
       "ban_vulnerability": {
         "stt_hints": ["уязвимость", "смертность"],
         "entry_points": [ ["уязвимост"], ["смертност"] ],
-        "exit_points": { "flag": "ban_vulnerability", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_vulnerability" }
       },
       "ban_limits": {
         "stt_hints": ["лимиты", "недостаток", "бесконечные блоки"],
         "entry_points": [ ["лимит"], ["недостаток"], ["бесконечност"] ],
-        "exit_points": { "flag": "ban_limits", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_limits" }
       },
       "ban_stash": {
         "stt_hints": ["тайник", "эндер сундук", "заначка"],
         "entry_points": [ ["тайник"], ["эндер", "сундук"], ["заначк"] ],
-        "exit_points": { "flag": "ban_ender_chest", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_ender_chest" }
       },
       "ban_interface": {
         "stt_hints": ["интерфейс", "фокус", "внимание"],
-        "entry_points": [ ["интерфейс"], ["фокус"], ["внимани"] ],
-        "exit_points": { "flag": "ban_containers", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["фокус"], ["внимани"] ],
+        "exit_points": { "flag": "ban_containers" }
       },
       "ban_grip": {
         "stt_hints": ["хватка", "дрожь", "слабые руки"],
         "entry_points": [ ["хватк"], ["дрож"], ["слаб", "рук"] ],
-        "exit_points": { "flag": "ban_grip", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_grip" }
       },
       "ban_grave": {
         "stt_hints": ["могила", "прошлое", "компас"],
         "entry_points": [ ["могил"], ["прошл"], ["компас", "восстановлени"] ],
-        "exit_points": { "flag": "ban_grave", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_grave" }
       },
       "ban_patience": {
         "stt_hints": ["перегрев", "ожидание", "кулдаун"],
-        "entry_points": [ ["перегрев"], ["ожидан"], ["кулдаун"] ],
-        "exit_points": { "flag": "ban_patience", "absurd_val": 1.0, "inverted_val": 0.0 }
-      }
-    },
-
-    "//": "КОНЦЕПЦИИ КЛИЕНТА: Синхронизация, зрение, слух (Network)",
-    "network_flags": {
+        "entry_points": [ ["перегрев"], ["ожидан"] ],
+        "exit_points": { "flag": "ban_patience" }
+      },
       "ban_hearing": {
         "stt_hints": ["слух", "глухота", "звук"],
-        "entry_points": [ ["слух"], ["глухот"], ["звук"] ],
-        "exit_points": { "flag": "ban_sound", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["слух"], ["глухот"] ],
+        "exit_points": { "flag": "ban_sound" }
       },
       "ban_horizon": {
         "stt_hints": ["горизонт", "дальность", "слепота"],
         "entry_points": [ ["горизонт"], ["дальност"], ["прорисовк"] ],
-        "exit_points": { "flag": "ban_horizon", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_horizon" }
       },
       "ban_windows": {
         "stt_hints": ["окна", "интерфейс", "контейнеры"],
         "entry_points": [ ["окн"], ["контейнер"] ],
-        "exit_points": { "flag": "ban_windows", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_windows" }
       },
       "ban_xp_ui": {
         "stt_hints": ["шкала", "индикатор", "полоска"],
-        "entry_points": [ ["шкал"], ["индикатор"], ["полоск"] ],
-        "exit_points": { "flag": "ban_xp_ui", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["шкал"], ["полоск"] ],
+        "exit_points": { "flag": "ban_xp_ui" }
       },
       "ban_vitality_ui": {
         "stt_hints": ["индикаторы", "полоса хп", "интерфейс жизни"],
-        "entry_points": [ ["индикатор"], ["полос", "жизн"], ["сердечк"] ],
-        "exit_points": { "flag": "ban_vitality_ui", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["полос", "жизн"], ["сердечк"] ],
+        "exit_points": { "flag": "ban_vitality_ui" }
       },
       "ban_choice": {
         "stt_hints": ["выбор", "колесико", "смена слота"],
         "entry_points": [ ["выбор"], ["колесик"], ["слот"] ],
-        "exit_points": { "flag": "ban_choice", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_choice" }
       },
       "ban_society": {
         "stt_hints": ["общество", "список игроков", "таб"],
         "entry_points": [ ["обществ"], ["список", "игрок"], ["таб"] ],
-        "exit_points": { "flag": "ban_society", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_society" }
       },
-      "ban_stability": {
-        "stt_hints": ["стабильность", "землетрясение", "дрожь"],
-        "entry_points": [ ["стабильност"], ["землетрясени"], ["дрож"] ],
-        "exit_points": { "flag": "ban_stability", "absurd_val": 1.0, "inverted_val": 0.0 }
+      "illusion_shake": {
+        "stt_hints": ["дрожь", "землетрясение", "тряска экрана"],
+        "entry_points": [ ["дрож"], ["землетрясени"], ["тряск"] ],
+        "exit_points": { "flag": "illusion_shake" }
       },
       "ban_clear_sky": {
         "stt_hints": ["ясное небо", "иллюзия дождя"],
         "entry_points": [ ["ясн", "неб"], ["сухост"] ],
-        "exit_points": { "flag": "illusion_rain", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "illusion_rain" }
       },
       "ban_daylight": {
         "stt_hints": ["дневной свет", "солнце", "иллюзия ночи"],
-        "entry_points": [ ["дневн", "свет"], ["солнц"], ["рассвет"] ],
-        "exit_points": { "flag": "illusion_night", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["дневн", "свет"], ["рассвет"] ],
+        "exit_points": { "flag": "illusion_night" }
       },
       "ban_safety_ui": {
         "stt_hints": ["безопасность", "красный экран", "граница"],
         "entry_points": [ ["красн", "экран"], ["тревог"], ["опасност"] ],
-        "exit_points": { "flag": "red_screen", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "red_screen" }
       },
       "ban_text_ui": {
         "stt_hints": ["титры", "текст", "сообщения на экране"],
-        "entry_points": [ ["титр"], ["текст"], ["надпис"] ],
-        "exit_points": { "flag": "ban_text_ui", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["титр"], ["надпис"] ],
+        "exit_points": { "flag": "ban_text_ui" }
       },
-      "ban_walk_anim": {
-        "stt_hints": ["анимация ног", "скольжение"],
-        "entry_points": [ ["шаг"], ["ходьб"], ["ног"] ],
-        "exit_points": { "flag": "ban_walk_anim", "absurd_val": 1.0, "inverted_val": 0.0 }
+      "no_fov_change": {
+        "stt_hints": ["фов", "динамический фов", "зум при беге"],
+        "entry_points": [ ["фов"], ["динамическ", "фов"], ["зум", "бег"] ],
+        "exit_points": { "flag": "no_client_speed" }
       },
       "ban_momentum": {
         "stt_hints": ["инерция", "зависание", "вязкость"],
         "entry_points": [ ["инерци"], ["вязкост"], ["зависани"] ],
-        "exit_points": { "flag": "ban_momentum", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_momentum" }
       },
-      "ban_ground": {
-        "stt_hints": ["земля", "опора", "пустота"],
-        "entry_points": [ ["земл"], ["опор"], ["пол"] ],
-        "exit_points": { "flag": "ban_ground", "absurd_val": 1.0, "inverted_val": 0.0 }
+      "illusion_void": {
+        "stt_hints": ["иллюзия пустоты", "земля исчезла", "пропасть"],
+        "entry_points": [ ["иллюзи", "пустот"], ["земл", "исчез"], ["пропаст"] ],
+        "exit_points": { "flag": "illusion_void" }
       },
       "ban_weapon_ui": {
         "stt_hints": ["оружие в руках", "невидимый меч"],
         "entry_points": [ ["оружи"], ["меч"], ["руки"] ],
-        "exit_points": { "flag": "ban_weapon_ui", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_weapon_ui" }
       },
       "ban_freedom": {
         "stt_hints": ["свобода", "тюрьма", "клетка"],
         "entry_points": [ ["свобод"], ["тюрьм"], ["клетк"] ],
-        "exit_points": { "flag": "ban_freedom", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_freedom" }
       },
       "ban_game": {
         "stt_hints": ["игра", "конец игры", "титры"],
-        "entry_points": [ ["игр"], ["финал"], ["титр"] ],
-        "exit_points": { "flag": "ban_game", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["финал"] ],
+        "exit_points": { "flag": "ban_game" }
       },
       "ban_history": {
         "stt_hints": ["история", "чат", "прошлое"],
         "entry_points": [ ["истори"], ["чат"], ["сообщени"] ],
-        "exit_points": { "flag": "ban_history", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_history" }
       },
       "ban_neck": {
         "stt_hints": ["шея", "взгляд", "поворот головы"],
         "entry_points": [ ["шея"], ["взгляд"], ["голов"] ],
-        "exit_points": { "flag": "ban_neck", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_neck" }
       },
       "ban_vision": {
         "stt_hints": ["зрение", "слепота", "свет"],
-        "entry_points": [ ["зрени"], ["глаз"], ["свет"] ],
-        "exit_points": { "flag": "ban_vision", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["зрени"], ["глаз"] ],
+        "exit_points": { "flag": "ban_vision" }
       },
       "ban_sky": {
         "stt_hints": ["небо", "солнце", "чернота"],
-        "entry_points": [ ["небо"], ["солнц"], ["облак"] ],
-        "exit_points": { "flag": "ban_sky", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["небо"], ["облак"] ],
+        "exit_points": { "flag": "ban_sky" }
       },
-      "ban_peace": {
-        "stt_hints": ["мир", "спокойствие", "битва"],
-        "entry_points": [ ["мир"], ["покой"], ["битв"] ],
-        "exit_points": { "flag": "ban_peace", "absurd_val": 1.0, "inverted_val": 0.0 }
+      "illusion_combat": {
+        "stt_hints": ["иллюзия боя", "режим боя", "битва"],
+        "entry_points": [ ["иллюзи", "бо"], ["режим", "бо"], ["битв"] ],
+        "exit_points": { "flag": "illusion_combat" }
       },
       "ban_ownership_ui": {
         "stt_hints": ["демо версия", "купи майнкрафт", "лицензия"],
         "entry_points": [ ["демо"], ["лицензи"], ["купи"] ],
-        "exit_points": { "flag": "ban_demo", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_demo" }
       },
       "ban_perspective": {
         "stt_hints": ["перспектива", "от третьего лица", "камера"],
-        "entry_points": [ ["перспектив"], ["треть", "лиц"], ["камер"] ],
-        "exit_points": { "flag": "ban_f5", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["перспектив"], ["треть", "лиц"] ],
+        "exit_points": { "flag": "ban_f5" }
       },
       "ban_sobriety": {
         "stt_hints": ["трезвость", "тошнота", "головокружение"],
         "entry_points": [ ["трезвост"], ["тошнот"], ["головокружени"] ],
-        "exit_points": { "flag": "ban_sobriety", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "ban_sobriety" }
       },
       "ban_self_render": {
         "stt_hints": ["отражение", "фантом", "меня нет"],
-        "entry_points": [ ["отражени"], ["фантом"], ["невидим"] ],
-        "exit_points": { "flag": "ban_self_render", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["отражени"], ["меня", "нет"] ],
+        "exit_points": { "flag": "ban_self_render" }
       },
       "phantom_jumpscare": {
         "stt_hints": ["страх", "древний страж", "скример"],
         "entry_points": [ ["страх"], ["древн", "страж"], ["скример"] ],
-        "exit_points": { "flag": "phantom_guardian", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "phantom_guardian" }
       },
       "phantom_arrows": {
         "stt_hints": ["обстрел", "звук стрел", "снайпер"],
         "entry_points": [ ["обстрел"], ["снайпер"], ["свист"] ],
-        "exit_points": { "flag": "phantom_arrows", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "phantom_arrows" }
       },
       "phantom_tool_break": {
         "stt_hints": ["хрупкость", "поломка", "треск"],
         "entry_points": [ ["хрупкост"], ["поломк"], ["треск"] ],
-        "exit_points": { "flag": "phantom_tool_break", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "phantom_tool_break" }
       },
       "phantom_end_portal": {
         "stt_hints": ["гул", "портал энда", "эхо"],
         "entry_points": [ ["гул"], ["портал", "энд"], ["эхо"] ],
-        "exit_points": { "flag": "phantom_end", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "phantom_end" }
       },
       "phantom_death_smoke": {
         "stt_hints": ["тлен", "дым смерти", "пепел"],
-        "entry_points": [ ["тлен"], ["дым", "смерти"], ["пепел"] ],
-        "exit_points": { "flag": "phantom_smoke", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "entry_points": [ ["тлен"], ["пепел"] ],
+        "exit_points": { "flag": "phantom_smoke" }
       },
       "illusion_max_level": {
         "stt_hints": ["иллюзия силы", "тысячный уровень"],
         "entry_points": [ ["иллюзи", "сил"], ["тысячн", "уровен"] ],
-        "exit_points": { "flag": "illusion_level", "absurd_val": 1.0, "inverted_val": 0.0 }
+        "exit_points": { "flag": "illusion_level" }
       }
     },
 

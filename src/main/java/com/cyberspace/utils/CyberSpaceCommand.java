@@ -56,6 +56,11 @@ public class CyberSpaceCommand {
                     .then(Commands.literal("false").executes(context -> setAiLookAtChat(context, false)));
 
 
+            var aiConfirmRepeatsNode = Commands.literal("aiConfirmRepeats")
+                    .then(Commands.literal("true").executes(context -> setAiConfirmRepeats(context, true)))
+                    .then(Commands.literal("false").executes(context -> setAiConfirmRepeats(context, false)));
+
+
 
             // ==========================================
             // Основное дерево команд
@@ -69,6 +74,8 @@ public class CyberSpaceCommand {
                                     .then(maxResponseTimeNode)
                                     .then(gamemodeNode)
                                     .then(voicemodNode)
+                                    .then(aiLookAtChatNode)
+                                    .then(aiConfirmRepeatsNode)
                             )
 
                             // Подкоманда: /cyberspace set ...
@@ -77,6 +84,8 @@ public class CyberSpaceCommand {
                                     .then(maxResponseTimeNode)
                                     .then(gamemodeNode)
                                     .then(voicemodNode)
+                                    .then(aiLookAtChatNode)
+                                    .then(aiConfirmRepeatsNode)
                             )
 
                             .then(Commands.literal("start")
@@ -192,6 +201,14 @@ public class CyberSpaceCommand {
     private static int setAiLookAtChat(CommandContext<CommandSourceStack> context, boolean mode) {
         CommandSourceStack source = context.getSource();
         source.sendSuccess(() -> Component.literal("§aРежим просмотра чата AI CyberSpace изменен на: §e" + mode), false);
+
+        // TODO: CyberSpaceConfig.setMode(mode);
+        return 1;
+    }
+
+    private static int setAiConfirmRepeats(CommandContext<CommandSourceStack> context, boolean mode) {
+        CommandSourceStack source = context.getSource();
+        source.sendSuccess(() -> Component.literal("§aРежим повторения CyberSpace изменен на: §e" + mode), false);
 
         // TODO: CyberSpaceConfig.setMode(mode);
         return 1;

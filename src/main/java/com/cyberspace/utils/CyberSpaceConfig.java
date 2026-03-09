@@ -15,12 +15,20 @@ public class CyberSpaceConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static JsonObject brainData;
 
+    // ВРЕМЕННЫЙ ФЛАГ: Принудительно обновлять конфиг из ресурсов при каждом запуске (для тестов)
+    private static final boolean FORCE_RELOAD = true;
+
     public static void loadConfig() {
         Path configDir = FabricLoader.getInstance().getConfigDir();
         // Новое имя файла в папке config на сервере
         Path jsonFile = configDir.resolve("CyberSpace_config.json");
 
         try {
+            if (FORCE_RELOAD) {
+                System.out.println("[CyberSpace] ВНИМАНИЕ: Активирован FORCE_RELOAD. Удаляю старый конфиг для обновления из ресурсов...");
+                Files.deleteIfExists(jsonFile);
+            }
+
             if (!Files.exists(jsonFile)) {
                 System.out.println("[CyberSpace] Конфиг не найден. Распаковываем стандартную матрицу...");
 

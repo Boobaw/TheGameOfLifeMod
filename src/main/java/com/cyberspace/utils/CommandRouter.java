@@ -19,164 +19,166 @@ import static com.cyberspace.hacker.DataHacker.toggleRule;
 public class CommandRouter {
 
     public static void processChunk(String chunk, ServerPlayer player, MinecraftServer server) {
-        System.out.println("[Router] Анализ команды: " + chunk);
+        System.out.println("[Router] Анализ команды (Smart Matcher): " + chunk);
 
-        // ==========================================
-        // ШАГ 1: ЧТЕНИЕ ГЛОБАЛЬНЫХ ФЛАГОВ
-        // ==========================================
-        boolean isReset = CyberSpaceParser.hasSystemTrigger(chunk, "mode_reset");
-        boolean reqDefault = CyberSpaceParser.hasSystemTrigger(chunk, "require_default");
-        boolean isCompMod = CyberSpaceParser.hasSystemTrigger(chunk, "modifier_component");
-        boolean isItemMod = CyberSpaceParser.hasSystemTrigger(chunk, "modifier_item");
-        boolean isBlockMod = CyberSpaceParser.hasSystemTrigger(chunk, "modifier_block");
+        // Контекст исполнения (наполняется в процессе фильтрации)
+        class ExecutionContext {
+            boolean isReset = false;
+            boolean reqDefault = false;
+            boolean isCompMod = false;
+            boolean isItemMod = false;
+            boolean isBlockMod = false;
 
-        Set<Block> blocksToToggle = new HashSet<>();
-        Set<WorldHacker.StateFilter> filtersToToggle = new HashSet<>();
-        Set<Item> itemsToToggle = new HashSet<>();
-        Set<EntityType<?>> targetEntities = new HashSet<>();
-
-        // ==========================================
-        // ШАГ 2: МАКРОСЫ
-        // ==========================================
-        for (Map.Entry<String, List<List<String>>> action : CyberSpaceParser.ACTIONS.entrySet()) {
-            if (CyberSpaceParser.checkMatch(chunk, action.getValue())) {
-                System.out.println("[Router] Запуск макроса: " + action.getKey());
-            }
+            final Set<Block> blocksToToggle = new HashSet<>();
+            final Set<WorldHacker.StateFilter> filtersToToggle = new HashSet<>();
+            final Set<Item> itemsToToggle = new HashSet<>();
+            final Set<EntityType<?>> targetEntities = new HashSet<>();
         }
+        ExecutionContext ctx = new ExecutionContext();
 
-        // ==========================================
-        // ШАГ 3: ПРЕДМЕТЫ И КВАНТОВЫЕ СЛЕПКИ
-        // ==========================================
-        for (CyberSpaceParser.ItemContext itemCtx : CyberSpaceParser.ITEM_RULES) {
-            if (CyberSpaceParser.checkMatch(chunk, itemCtx.triggers())) {
-                Item targetItem = itemCtx.target();
+        // Умный коллектор с поддержкой приоритетов
+        class MatchCollector {
+            record PendingAction(CyberSpaceParser.MatchResult res, Runnable action, String debugName) {}
+            final List<PendingAction> actions = new ArrayList<>();
 
-                if (isCompMod) {
-                    System.out.println("[Router] Запуск Квантового Слепка для: " + BuiltInRegistries.ITEM.getKey(targetItem));
+            void add(CyberSpaceParser.MatchResult res, Runnable action, String debugName) {
+                if (res != null) {
+                    System.out.println("[Router] Найден кандидат: " + debugName + " (индексы: " + res.indices() + ")");
+                    actions.add(new PendingAction(res, action, debugName));
+                }
+            }
 
-                    // Создаем ОДНО правило, которое хранит в себе донора целиком.
-                    // DataHacker.applyRule сам разберет его на компоненты и решит, кого банить!
-                    String ruleId = "snapshot_" + BuiltInRegistries.ITEM.getKey(targetItem).getPath();
+            void execute() {
+                if (actions.isEmpty()) return;
 
-                    DataHacker.RuleData<?> snapshotRule = new DataHacker.RuleData<>(
-                            null,          // type: null (applyRule сам переберет все компоненты донора)
-                            null,          // subcomponents: null
-                            targetItem,    // targetItem: наш донор (Алмазный меч)
-                            reqDefault    // reqDefault: решает, будет ли это только Вирус или Вирус + Кувалда
-                    );
+                // Группируем кандидатов с одинаковыми индексами:
+                // они "заявляют права" на одну и ту же фразу в строке
+                // и должны либо все исполниться, либо все пропуститься вместе.
+                Map<BitSet, List<PendingAction>> groups = new LinkedHashMap<>();
+                for (PendingAction pending : actions) {
+                    groups.computeIfAbsent(pending.res.indices(), k -> new ArrayList<>()).add(pending);
+                }
 
-                    toggleRule(server, ruleId, snapshotRule);
+                // Сортируем группы по максимальному весу (убыванием)
+                List<Map.Entry<BitSet, List<PendingAction>>> sortedGroups = new ArrayList<>(groups.entrySet());
+                sortedGroups.sort((a, b) -> {
+                    int wA = a.getValue().stream().mapToInt(p -> p.res.weight()).max().orElse(0);
+                    int wB = b.getValue().stream().mapToInt(p -> p.res.weight()).max().orElse(0);
+                    return Integer.compare(wB, wA);
+                });
 
-                } else if (!isBlockMod) {
-                    // Обычный бан предмета (если не сказано "блок")
-                    itemsToToggle.add(targetItem);
+                System.out.println("[Router] Всего кандидатов: " + actions.size() + " в " + sortedGroups.size() + " группах. Начинаю фильтрацию...");
+
+                BitSet coveredIndices = new BitSet();
+                for (Map.Entry<BitSet, List<PendingAction>> entry : sortedGroups) {
+                    BitSet groupIndices = entry.getKey();
+                    List<PendingAction> groupActions = entry.getValue();
+
+                    BitSet intersection = (BitSet) groupIndices.clone();
+                    intersection.and(coveredIndices);
+
+                    if (intersection.isEmpty()) {
+                        // Группа не пересекается с уже покрытым — исполняем всё скопом
+                        for (PendingAction pending : groupActions) {
+                            System.out.println("[Router] Исполнение: " + pending.debugName + " (вес: " + pending.res.weight() + ")");
+                            pending.action.run();
+                        }
+                        coveredIndices.or(groupIndices);
+                    } else {
+                        // Группа пересекается с более тяжёлым — пропускаем всё скопом
+                        for (PendingAction pending : groupActions) {
+                            System.out.println("[Router] Пропуск (ПЕРЕСЕКАЕТСЯ С БОЛЕЕ ТЯЖЁЛЫМ): " + pending.debugName);
+                        }
+                    }
                 }
             }
         }
+        MatchCollector collector = new MatchCollector();
 
         // ==========================================
-        // ШАГ 4: ТОЧЕЧНЫЕ КОМПОНЕНТЫ
+        // ШАГ 1: СИСТЕМНЫЕ ТРИГГЕРЫ (Модификаторы)
         // ==========================================
-        for (CyberSpaceParser.ComponentContext compCtx : CyberSpaceParser.COMPONENT_RULES) {
-            if (CyberSpaceParser.checkMatch(chunk, compCtx.triggers())) {
-                System.out.println("[Router] Точечный компонент: " + BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(compCtx.type()));
+        collector.add(CyberSpaceParser.getSystemMatchResult(chunk, "mode_reset"), () -> ctx.isReset = true, "System: Reset");
+        collector.add(CyberSpaceParser.getSystemMatchResult(chunk, "require_default"), () -> ctx.reqDefault = true, "System: Default");
+        collector.add(CyberSpaceParser.getSystemMatchResult(chunk, "modifier_component"), () -> ctx.isCompMod = true, "System: ComponentMod");
+        collector.add(CyberSpaceParser.getSystemMatchResult(chunk, "modifier_item"), () -> ctx.isItemMod = true, "System: ItemMod");
+        collector.add(CyberSpaceParser.getSystemMatchResult(chunk, "modifier_block"), () -> ctx.isBlockMod = true, "System: BlockMod");
 
-                // Строгие 6 параметров для точечного глобального правила
-                DataHacker.RuleData<?> rule = new DataHacker.RuleData<>(
-                        compCtx.type(),
-                        compCtx.subcomponents(),
-                        null,       // targetItem: нет донора, правило глобальное
-                        reqDefault
-                );
-
-                toggleRule(server, compCtx.ruleName(), rule);
-            }
-        }
-
-        // =========================================
-        // 1. Атрибуты
-        // =========================================
-        for (com.cyberspace.utils.CyberSpaceParser.AttributeContext attrCtx : com.cyberspace.utils.CyberSpaceParser.ATTRIBUTE_RULES) {
-            if (com.cyberspace.utils.CyberSpaceParser.checkMatch(chunk, attrCtx.triggers())) {
-                EntityStateHacker.toggleAttribute(server, attrCtx);
-                System.out.println("[Router] Атрибут: " + attrCtx.ruleName());
-            }
-        }
-
-        // =========================================
-        // 2. Флаги сущностей (entity, living, player, network)
-        // Один флаг может встречаться в нескольких секциях конфига под одним именем.
-        // Дедупликация по имени флага гарантирует ровно один toggleFlag на имя.
-        // =========================================
-        Set<String> toggledFlags = new HashSet<>();
-
-        for (com.cyberspace.utils.CyberSpaceParser.EntityFlagContext ctx : com.cyberspace.utils.CyberSpaceParser.ENTITY_FLAG_RULES) {
-            if (com.cyberspace.utils.CyberSpaceParser.checkMatch(chunk, ctx.triggers()) && toggledFlags.add(ctx.flag())) {
-                EntityStateHacker.toggleFlag(ctx);
-                System.out.println("[Router] Entity-флаг: " + ctx.ruleName());
-            }
-        }
-        for (com.cyberspace.utils.CyberSpaceParser.EntityFlagContext ctx : com.cyberspace.utils.CyberSpaceParser.LIVING_FLAG_RULES) {
-            if (com.cyberspace.utils.CyberSpaceParser.checkMatch(chunk, ctx.triggers()) && toggledFlags.add(ctx.flag())) {
-                EntityStateHacker.toggleFlag(ctx);
-                System.out.println("[Router] Living-флаг: " + ctx.ruleName());
-            }
-        }
-        for (com.cyberspace.utils.CyberSpaceParser.EntityFlagContext ctx : com.cyberspace.utils.CyberSpaceParser.PLAYER_FLAG_RULES) {
-            if (com.cyberspace.utils.CyberSpaceParser.checkMatch(chunk, ctx.triggers()) && toggledFlags.add(ctx.flag())) {
-                EntityStateHacker.toggleFlag(ctx);
-                System.out.println("[Router] Player-флаг: " + ctx.ruleName());
-            }
-        }
-        for (com.cyberspace.utils.CyberSpaceParser.EntityFlagContext ctx : com.cyberspace.utils.CyberSpaceParser.NETWORK_FLAG_RULES) {
-            if (com.cyberspace.utils.CyberSpaceParser.checkMatch(chunk, ctx.triggers()) && toggledFlags.add(ctx.flag())) {
-                EntityStateHacker.toggleFlag(ctx);
-                System.out.println("[Router] Network-флаг: " + ctx.ruleName());
-            }
+        // ==========================================
+        // ШАГ 2: МАКРОСЫ (Actions)
+        // ==========================================
+        for (Map.Entry<String, List<List<String>>> entry : CyberSpaceParser.ACTIONS.entrySet()) {
+            collector.add(CyberSpaceParser.getMatchResult(chunk, entry.getValue()), 
+                () -> System.out.println("[Router] Макрос активен: " + entry.getKey()), "Macro: " + entry.getKey());
         }
 
         // ==========================================
-        // ШАГ 5: БЛОКИ В МИРЕ
+        // ШАГ 3: ПРАВИЛА (Предметы, Блоки, Атрибуты)
         // ==========================================
-        if (!isCompMod && !isItemMod) {
-            // ВАЖНО: Если игрок сказал "предмет обсидиана", мы игнорируем блоки
-            for (CyberSpaceParser.BlockContext blockCtx : CyberSpaceParser.BLOCK_RULES) {
-                if (CyberSpaceParser.checkMatch(chunk, blockCtx.triggers())) {
+
+        // 1. Предметы
+        for (CyberSpaceParser.ItemContext itemCtx : CyberSpaceParser.ITEM_RULES) {
+            collector.add(CyberSpaceParser.getMatchResult(chunk, itemCtx.triggers()), () -> {
+                Item targetItem = itemCtx.target();
+                if (ctx.isCompMod) {
+                    String ruleId = "snapshot_" + BuiltInRegistries.ITEM.getKey(targetItem).getPath();
+                    toggleRule(server, ruleId, new DataHacker.RuleData<>(null, null, targetItem, ctx.reqDefault));
+                } else if (!ctx.isBlockMod) {
+                    ctx.itemsToToggle.add(targetItem);
+                }
+            }, "Item: " + BuiltInRegistries.ITEM.getKey(itemCtx.target()));
+        }
+
+        // 2. Блоки
+        for (CyberSpaceParser.BlockContext blockCtx : CyberSpaceParser.BLOCK_RULES) {
+            collector.add(CyberSpaceParser.getMatchResult(chunk, blockCtx.triggers()), () -> {
+                if (!ctx.isCompMod && !ctx.isItemMod) {
                     boolean hasActiveStateFilter = false;
-
                     for (CyberSpaceParser.BlockStateContext stateCtx : CyberSpaceParser.BLOCKSTATE_RULES) {
                         if (CyberSpaceParser.checkMatch(chunk, stateCtx.triggers())) {
                             WorldHacker.StateFilter filter = buildStateFilter(blockCtx.target(), stateCtx.property(), stateCtx.value());
                             if (filter != null) {
-                                filtersToToggle.add(filter);
+                                ctx.filtersToToggle.add(filter);
                                 hasActiveStateFilter = true;
                             }
                         }
                     }
-
-                    if (!hasActiveStateFilter && !isReset) {
-                        blocksToToggle.add(blockCtx.target());
+                    if (!hasActiveStateFilter && !ctx.isReset) {
+                        ctx.blocksToToggle.add(blockCtx.target());
                     }
                 }
-            }
+            }, "Block: " + BuiltInRegistries.BLOCK.getKey(blockCtx.target()));
         }
 
-        // ==========================================
-        // ШАГ 6: СУЩНОСТИ
-        // ==========================================
+        // 3. Компоненты
+        for (CyberSpaceParser.ComponentContext compCtx : CyberSpaceParser.COMPONENT_RULES) {
+            collector.add(CyberSpaceParser.getMatchResult(chunk, compCtx.triggers()), () -> {
+                toggleRule(server, compCtx.ruleName(), new DataHacker.RuleData<>(compCtx.type(), compCtx.subcomponents(), null, ctx.reqDefault));
+            }, "Component: " + compCtx.ruleName());
+        }
+
+        // 4. Атрибуты
+        for (CyberSpaceParser.AttributeContext attrCtx : CyberSpaceParser.ATTRIBUTE_RULES) {
+            collector.add(CyberSpaceParser.getMatchResult(chunk, attrCtx.triggers()), () -> EntityStateHacker.toggleAttribute(server, attrCtx), "Attribute: " + attrCtx.ruleName());
+        }
+
+        // 5. Флаги
+        for (CyberSpaceParser.EntityFlagContext f : CyberSpaceParser.FLAG_RULES) collector.add(CyberSpaceParser.getMatchResult(chunk, f.triggers()), () -> EntityStateHacker.toggleFlag(f), "Flag: " + f.ruleName());
+
+        // 6. Сущности
         for (CyberSpaceParser.EntityContext entityCtx : CyberSpaceParser.ENTITY_RULES) {
-            if (CyberSpaceParser.checkMatch(chunk, entityCtx.triggers())) {
-                targetEntities.addAll(entityCtx.targets());
-            }
+            collector.add(CyberSpaceParser.getMatchResult(chunk, entityCtx.triggers()), () -> ctx.targetEntities.addAll(entityCtx.targets()), "Entities: " + entityCtx.targets());
         }
 
         // ==========================================
-        // ФИНАЛЬНЫЙ ЗАЛП: Умная гибридная логика
+        // ФИНАЛЬНЫЙ ЭТАП: Фильтрация и запуск
         // ==========================================
-        executeToggleLogic(server, itemsToToggle, blocksToToggle, filtersToToggle, isReset, isItemMod, isBlockMod, isCompMod);
+        collector.execute();
 
-        if (!targetEntities.isEmpty()) {
-            EntityHacker.toggleEntity(server, targetEntities);
+        executeToggleLogic(server, ctx.itemsToToggle, ctx.blocksToToggle, ctx.filtersToToggle, ctx.isReset, ctx.isItemMod, ctx.isBlockMod, ctx.isCompMod);
+
+        if (!ctx.targetEntities.isEmpty()) {
+            EntityHacker.toggleEntity(server, ctx.targetEntities);
         }
     }
 

@@ -46,8 +46,18 @@ public class EntityStateHacker {
 
     // ID модификаторов скорости (используем модификаторы вместо setBaseValue,
     // чтобы не трогать реальный базовый показатель сущности)
-    private static final Identifier SPEED_LIMIT_ID  = Identifier.fromNamespaceAndPath("cyberspace", "speed_ban_speed_limit");
-    private static final Identifier SPEED_MUSCLES_ID = Identifier.fromNamespaceAndPath("cyberspace", "speed_ban_muscles");
+    private static final Identifier SPEED_LIMIT_ID   = Identifier.fromNamespaceAndPath("cyberspace", "speed_ban_speed_limit");
+    private static final Identifier SPEED_MUSCLES_ID  = Identifier.fromNamespaceAndPath("cyberspace", "speed_ban_muscles");
+    private static final Identifier FREEZE_KB_ID      = Identifier.fromNamespaceAndPath("cyberspace", "freeze_kb_resist");
+    private static final Identifier FREEZE_FLYING_ID  = Identifier.fromNamespaceAndPath("cyberspace", "freeze_flying_speed");
+
+    // Per-entity состояние для ban_speed_limit
+    private static final WeakHashMap<LivingEntity, Double> SPEED_SCORES   = new WeakHashMap<>();
+    private static final WeakHashMap<LivingEntity, Vec3>   PREV_POSITIONS = new WeakHashMap<>();
+
+    // Сохранённые базовые значения movement_speed (для корректного восстановления)
+    private static final WeakHashMap<LivingEntity, Double> SAVED_SPEEDS   = new WeakHashMap<>();
+
 
     // ================================================
     // СКОМПИЛИРОВАННЫЕ ПЛАНЫ ТИКА
@@ -68,18 +78,42 @@ public class EntityStateHacker {
     // ПЕРЕКЛЮЧЕНИЕ ФЛАГОВ
     // ================================================
     public static void toggleFlag(EntityFlagContext ctx) {
-        String name = ctx.flag();
-        if (ACTIVE_FLAGS.containsKey(name)) {
-            ACTIVE_FLAGS.remove(name);
-            System.out.println("[EntityStateHacker] Снято: " + name);
+        if (ctx.isComposite()) {
+            // Флаговые атомы: каждый переключается независимо
+            if (ctx.atoms() != null) {
+                for (String atom : ctx.atoms()) {
+                    if (ACTIVE_FLAGS.containsKey(atom)) {
+                        ACTIVE_FLAGS.remove(atom);
+                        System.out.println("[EntityStateHacker] Атом снят: " + atom);
+                    } else {
+                        ACTIVE_FLAGS.put(atom, 1.0);
+                        System.out.println("[EntityStateHacker] Атом наложен: " + atom);
+                    }
+                }
+            }
+            // Атрибутные атомы: ищем по ruleName и переключаем
+            if (ctx.attrAtoms() != null) {
+                for (String attrName : ctx.attrAtoms()) {
+                    com.cyberspace.utils.CyberSpaceParser.ATTRIBUTE_RULES.stream()
+                            .filter(a -> a.ruleName().equals(attrName))
+                            .findFirst()
+                            .ifPresent(EntityStateHacker::toggleAttributeInternal);
+                }
+            }
         } else {
-            ACTIVE_FLAGS.put(name, ctx.absurdVal());
-            System.out.println("[EntityStateHacker] Наложено: " + name);
+            String name = ctx.flag();
+            if (ACTIVE_FLAGS.containsKey(name)) {
+                ACTIVE_FLAGS.remove(name);
+                System.out.println("[EntityStateHacker] Снято: " + name);
+            } else {
+                ACTIVE_FLAGS.put(name, ctx.absurdVal());
+                System.out.println("[EntityStateHacker] Наложено: " + name);
+            }
         }
         GLOBAL_EPOCH++;
     }
 
-    public static void toggleAttribute(MinecraftServer server, AttributeContext ctx) {
+    private static void toggleAttributeInternal(AttributeContext ctx) {
         Identifier id = Identifier.fromNamespaceAndPath("cyberspace", "attr_" + ctx.ruleName());
         if (ACTIVE_MODIFIERS.containsKey(ctx)) {
             ACTIVE_MODIFIERS.remove(ctx);
@@ -88,6 +122,10 @@ public class EntityStateHacker {
             ACTIVE_MODIFIERS.put(ctx, new AttributeModifier(id, ctx.absurdVal(), AttributeModifier.Operation.ADD_VALUE));
             System.out.println("[EntityStateHacker] Атрибут наложен: " + ctx.ruleName());
         }
+    }
+
+    public static void toggleAttribute(MinecraftServer server, AttributeContext ctx) {
+        toggleAttributeInternal(ctx);
         GLOBAL_EPOCH++;
     }
 
@@ -100,6 +138,11 @@ public class EntityStateHacker {
 
     private static void recompile() {
         if (COMPILED_EPOCH == GLOBAL_EPOCH) return;
+
+        if (!flag("ban_speed_limit")) {
+            SPEED_SCORES.clear();
+            PREV_POSITIONS.clear();
+        }
 
         List<Consumer<Entity>>       ed = new ArrayList<>();
         List<Consumer<LivingEntity>> ld = new ArrayList<>();
@@ -114,23 +157,27 @@ public class EntityStateHacker {
         // Всё что ванила сбрасывает каждый тик — переопределяем после неё.
         // ============================================
 
-        // Три разных концепции заморозки — один эффект. Бан движения приоритетнее буста скорости.
-        if (flag("ban_movement") || flag("ban_kinetic_energy") || flag("force_stasis")) {
+        // Атомы движения — каждый работает независимо.
+        if (flag("no_gravity"))
+            ed.add(e -> e.setNoGravity(true)); // dynamic для первого тика (static сделает персистентно)
+
+        if (flag("zero_momentum")) {
             ed.add(e -> {
                 e.setDeltaMovement(Vec3.ZERO);
                 if (e instanceof ServerPlayer p)
                     p.connection.send(new ClientboundSetEntityMotionPacket(p.getId(), Vec3.ZERO));
             });
         } else if (flag("ban_speed_limit")) {
+            // Ускорение даёт атрибут (см. livingStatic): ванила сама считает инпут по взгляду.
+            // Здесь только страховочный cap — чтобы физика не улетела в NaN.
             ed.add(e -> {
                 Vec3 move = e.getDeltaMovement();
-                if (move.lengthSqr() > 0.001) {
-                    // Мы не форсируем скорость, а убираем "лимит", позволяя сущностям 
-                    // разгоняться постепенно до огромных скоростей (компенсируя часть трения).
-                    Vec3 boosted = move.scale(1.08);
-                    e.setDeltaMovement(boosted);
+                final double MAX_SPEED = 50.0;
+                if (move.lengthSqr() > MAX_SPEED * MAX_SPEED) {
+                    Vec3 capped = move.normalize().scale(MAX_SPEED);
+                    e.setDeltaMovement(capped);
                     if (e instanceof ServerPlayer p)
-                        p.connection.send(new ClientboundSetEntityMotionPacket(p.getId(), boosted));
+                        p.connection.send(new ClientboundSetEntityMotionPacket(p.getId(), capped));
                 }
             });
         }
@@ -182,8 +229,8 @@ public class EntityStateHacker {
         // ============================================
         {
             // Захватываем целевое состояние каждого поля в момент компиляции
-            boolean noPhysics     = flag("no_physics");
-            boolean noGravity     = flag("no_gravity") || flag("ban_gravity");
+            boolean noPhysics = flag("no_physics");
+            boolean noGravity = flag("no_gravity");
             boolean glowing       = flag("glowing");
             boolean invisible     = flag("invisible");
             boolean invulnerable  = flag("invulnerable");
@@ -230,7 +277,7 @@ public class EntityStateHacker {
             ld.add(e -> e.setHealth(0.0f));
         if (flag("ban_absorption"))
             ld.add(e -> e.setAbsorptionAmount(0.0f));
-        if (flag("ban_jump"))
+        if (flag("no_jump"))
             ld.add(e -> e.setJumping(false));
         if (flag("ban_swing"))
             ld.add(e -> { e.swinging = false; e.swingTime = 0; e.attackAnim = 0.0f; });
@@ -240,6 +287,30 @@ public class EntityStateHacker {
             ld.add(e -> { e.hurtTime = 10; e.hurtDuration = 10; });
         if (flag("buff_death"))
             ld.add(e -> e.deathTime = 19);
+        if (flag("ban_speed_limit")) {
+            // Детектируем движение по позиции — единственный надёжный серверный источник.
+            // getDeltaMovement() для ServerPlayer почти всегда 0 (сервер не симулирует его физику),
+            // поэтому сравниваем реальную позицию с предыдущим тиком.
+            final double RAMP_UP   = 1.0;
+            final double MAX_MOD   = 249000.0;
+            ld.add(e -> {
+                Vec3 pos  = e.position();
+                Vec3 prev = PREV_POSITIONS.getOrDefault(e, pos);
+                PREV_POSITIONS.put(e, pos);
+                double mod = SPEED_SCORES.getOrDefault(e, 0.0);
+                boolean moving = e instanceof ServerPlayer
+                        ? pos.distanceToSqr(prev) > 0.001
+                        : e.getDeltaMovement().lengthSqr() > 0.0001;
+                mod = moving ? Math.min(mod + RAMP_UP, MAX_MOD) : 0.0;
+                SPEED_SCORES.put(e, mod);
+                AttributeInstance spd = e.getAttribute(Attributes.MOVEMENT_SPEED);
+                if (spd != null) {
+                    spd.removeModifier(SPEED_LIMIT_ID);
+                    if (mod > 0.0)
+                        spd.addTransientModifier(new AttributeModifier(SPEED_LIMIT_ID, mod, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
+                }
+            });
+        }
 
         // ============================================
         // LIVING STATIC
@@ -247,26 +318,47 @@ public class EntityStateHacker {
         // ============================================
         {
             boolean hasBanSpeedLimit = flag("ban_speed_limit");
-            boolean hasBanMuscles    = flag("ban_muscles");
+            boolean atomMuscles      = flag("no_muscles");
+            boolean atomKnockback    = flag("no_knockback");
             boolean hasArrows        = flag("buff_arrows");
             boolean hasStingers      = flag("buff_stingers");
             int arrowCount   = hasArrows   ? ACTIVE_FLAGS.get("buff_arrows").intValue()   : 0;
             int stingerCount = hasStingers ? ACTIVE_FLAGS.get("buff_stingers").intValue() : 0;
 
             // Модификаторы скорости: пересобираем при каждой смене эпохи
-            AttributeModifier speedLimitMod = null; // Мы больше не трогаем атрибут напрямую, чтобы не менять ускорение (см. Dynamic)
-            AttributeModifier speedMusclesMod = hasBanMuscles
-                    ? new AttributeModifier(SPEED_MUSCLES_ID, -1.0,  AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL) : null;
+            AttributeModifier speedLimitMod = null; // рамп обрабатывается в livingDynamic
+            boolean hasZeroSpeed = atomMuscles;
+            boolean atomFlying = flag("no_flying");
+            AttributeModifier flyingSpeedMod = atomFlying
+                    ? new AttributeModifier(FREEZE_FLYING_ID, -1000000.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL) : null;
 
             ls.add(e -> {
-                // Скорость через модификаторы — базовый показатель сущности остаётся нетронутым.
-                // При снятии флага модификатор просто удаляется, скорость возвращается сама.
                 AttributeInstance speed = e.getAttribute(Attributes.MOVEMENT_SPEED);
                 if (speed != null) {
                     speed.removeModifier(SPEED_LIMIT_ID);
                     speed.removeModifier(SPEED_MUSCLES_ID);
-                    if (speedLimitMod  != null) speed.addPermanentModifier(speedLimitMod);
-                    if (speedMusclesMod != null) speed.addPermanentModifier(speedMusclesMod);
+                    if (hasZeroSpeed) {
+                        // Сохраняем оригинальный baseValue только один раз
+                        SAVED_SPEEDS.computeIfAbsent(e, k -> speed.getBaseValue());
+                        speed.setBaseValue(0.0);
+                    } else {
+                        // Восстанавливаем сохранённое значение если флаг снят
+                        Double saved = SAVED_SPEEDS.remove(e);
+                        if (saved != null) speed.setBaseValue(saved);
+                        if (speedLimitMod != null) speed.addPermanentModifier(speedLimitMod);
+                    }
+                }
+                AttributeInstance flying = e.getAttribute(Attributes.FLYING_SPEED);
+                if (flying != null) {
+                    flying.removeModifier(FREEZE_FLYING_ID);
+                    if (flyingSpeedMod != null) flying.addPermanentModifier(flyingSpeedMod);
+                }
+
+                // Нокбэк: полное сопротивление, чтобы удар не двигал сущность.
+                AttributeInstance kb = e.getAttribute(Attributes.KNOCKBACK_RESISTANCE);
+                if (kb != null) {
+                    kb.removeModifier(FREEZE_KB_ID);
+                    if (atomKnockback) kb.addPermanentModifier(new AttributeModifier(FREEZE_KB_ID, 1.0, AttributeModifier.Operation.ADD_VALUE));
                 }
 
                 e.setArrowCount(arrowCount);
@@ -362,6 +454,8 @@ public class EntityStateHacker {
         // NETWORK DYNAMIC
         // Пакеты не персистируют на клиенте — всё только в динамике.
         // ============================================
+        if (flag("no_muscles"))
+            nd.add(p -> { AttributeInstance spd = p.getAttribute(Attributes.MOVEMENT_SPEED); if (spd != null) p.connection.send(new ClientboundUpdateAttributesPacket(p.getId(), List.of(spd))); });
         if (flag("ban_sound"))
             nd.add(p -> p.connection.send(new ClientboundStopSoundPacket(null, null)));
         if (flag("ban_horizon"))
@@ -376,7 +470,7 @@ public class EntityStateHacker {
             nd.add(p -> p.connection.send(new ClientboundSetHeldSlotPacket(0)));
         if (flag("ban_society"))
             nd.add(p -> { List<UUID> uuids = SERVER.getPlayerList().getPlayers().stream().map(Entity::getUUID).toList(); p.connection.send(new ClientboundPlayerInfoRemovePacket(uuids)); });
-        if (flag("ban_stability"))
+        if (flag("illusion_shake"))
             nd.add(p -> p.connection.send(new ClientboundHurtAnimationPacket(p)));
         if (flag("illusion_rain"))
             nd.add(p -> { p.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.START_RAINING, 0.0f)); p.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE, 1.0f)); });
@@ -386,11 +480,11 @@ public class EntityStateHacker {
             nd.add(p -> { WorldBorder fb = new WorldBorder(); fb.setCenter(p.getX(), p.getZ()); fb.setSize(1000000.0); p.connection.send(new ClientboundSetBorderWarningDistancePacket(fb)); });
         if (flag("ban_text_ui"))
             nd.add(p -> p.connection.send(new ClientboundClearTitlesPacket(true)));
-        if (flag("ban_walk_anim"))
-            nd.add(p -> { Abilities fa = new Abilities(); fa.setWalkingSpeed(0.0f); p.connection.send(new ClientboundPlayerAbilitiesPacket(fa)); });
         if (flag("ban_momentum"))
             nd.add(p -> p.connection.send(new ClientboundSetEntityMotionPacket(p.getId(), Vec3.ZERO)));
-        if (flag("ban_ground"))
+        if (flag("no_client_speed"))
+            nd.add(p -> { Abilities a = p.getAbilities(); float saved = a.getWalkingSpeed(); a.setWalkingSpeed(0.0f); p.connection.send(new ClientboundPlayerAbilitiesPacket(a)); a.setWalkingSpeed(saved); });
+        if (flag("illusion_void"))
             nd.add(p -> p.connection.send(new ClientboundForgetLevelChunkPacket(p.chunkPosition())));
         if (flag("ban_weapon_ui"))
             nd.add(p -> p.connection.send(new ClientboundSetEquipmentPacket(p.getId(), List.of(Pair.of(EquipmentSlot.MAINHAND, ItemStack.EMPTY)))));
@@ -406,7 +500,7 @@ public class EntityStateHacker {
             nd.add(p -> p.connection.send(new ClientboundUpdateMobEffectPacket(p.getId(), new MobEffectInstance(MobEffects.BLINDNESS, 20, 0, false, false, false), false)));
         if (flag("ban_sky"))
             nd.add(p -> p.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE, 1.0f)));
-        if (flag("ban_peace"))
+        if (flag("illusion_combat"))
             nd.add(p -> p.connection.send(ClientboundPlayerCombatEnterPacket.INSTANCE));
         if (flag("ban_demo"))
             nd.add(p -> p.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.DEMO_EVENT, 0.0f)));

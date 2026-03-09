@@ -31,8 +31,13 @@ public class CyberSpaceParser {
     public record BlockContext(List<List<String>> triggers, Block target) {}
     public record BlockStateContext(List<List<String>> triggers, String property, String value) {}
     public record EntityContext(List<List<String>> triggers, Set<EntityType<?>> targets) {}
-    public record AttributeContext(List<List<String>> triggers, Holder<Attribute> attribute, double absurdVal, double invertedVal, String ruleName) {}
-    public record EntityFlagContext(String ruleName, List<List<String>> triggers, String flag, double absurdVal, double invertedVal) {}
+    public record AttributeContext(List<List<String>> triggers, Holder<Attribute> attribute, double absurdVal, String ruleName) {}
+    // flag != null → атом; atoms/attrAtoms != null → составной объект
+    public record EntityFlagContext(String ruleName, List<List<String>> triggers, String flag, double absurdVal, List<String> atoms, List<String> attrAtoms) {
+        public boolean isComposite() {
+            return (atoms != null && !atoms.isEmpty()) || (attrAtoms != null && !attrAtoms.isEmpty());
+        }
+    }
 
     // ==========================================
     // 2. КЭШИ В ПАМЯТИ
@@ -42,18 +47,13 @@ public class CyberSpaceParser {
     public static final Map<String, List<List<String>>> SYSTEM_TRIGGERS = new HashMap<>();
     public static final Map<String, List<List<String>>> ACTIONS = new HashMap<>();
 
-    public static final Map<String, List<String>> CONFLICTS = new HashMap<>();
-
     public static final List<ComponentContext> COMPONENT_RULES = new ArrayList<>();
     public static final List<ItemContext> ITEM_RULES = new ArrayList<>();
     public static final List<BlockContext> BLOCK_RULES = new ArrayList<>();
     public static final List<BlockStateContext> BLOCKSTATE_RULES = new ArrayList<>();
     public static final List<EntityContext> ENTITY_RULES = new ArrayList<>();
     public static final List<AttributeContext> ATTRIBUTE_RULES = new ArrayList<>();
-    public static final List<EntityFlagContext> ENTITY_FLAG_RULES = new ArrayList<>();
-    public static final List<EntityFlagContext> LIVING_FLAG_RULES = new ArrayList<>();
-    public static final List<EntityFlagContext> PLAYER_FLAG_RULES = new ArrayList<>();
-    public static final List<EntityFlagContext> NETWORK_FLAG_RULES = new ArrayList<>();
+    public static final List<EntityFlagContext> FLAG_RULES = new ArrayList<>();
 
     // ==========================================
     // 3. ИНИЦИАЛИЗАЦИЯ
@@ -71,17 +71,13 @@ public class CyberSpaceParser {
         WHISPER_INITIAL_PROMPT = ""; // Очищаем перед парсингом
 
         parseSystemTriggers(registry);
-        parseConflicts(registry);
         parseActions(registry);
         parseUniversalItems(registry); // Общий парсер для предметов и блоков
         parseComponents(registry);
         parseBlockStates(registry);
         parseEntities(registry);
         parseAttributes(registry);
-        parseEntityFlags(registry);
-        parseLivingFlags(registry);
-        parsePlayerFlags(registry);
-        parseNetworkFlags(registry);
+        parseFlags(registry);
 
         // Убираем последнюю запятую с пробелом из промпта
         if (WHISPER_INITIAL_PROMPT.endsWith(", ")) {
@@ -128,17 +124,6 @@ public class CyberSpaceParser {
         }
     }
 
-    private static void parseConflicts(JsonObject registry) {
-        if (!registry.has("conflicts")) return;
-        for (Map.Entry<String, JsonElement> entry : registry.getAsJsonObject("conflicts").entrySet()) {
-            List<String> exclusions = new ArrayList<>();
-            for (JsonElement el : entry.getValue().getAsJsonArray()) {
-                exclusions.add(el.getAsString().toLowerCase());
-            }
-            CONFLICTS.put(entry.getKey().toLowerCase(), exclusions);
-        }
-    }
-
     private static void parseAttributes(JsonObject registry) {
         if (!registry.has("attributes")) return;
         for (Map.Entry<String, JsonElement> entry : registry.getAsJsonObject("attributes").entrySet()) {
@@ -158,94 +143,49 @@ public class CyberSpaceParser {
             }
 
             double absurdVal = exit.get("absurd_val").getAsDouble();
-            double invertedVal = exit.get("inverted_val").getAsDouble();
 
             ATTRIBUTE_RULES.add(new AttributeContext(
                     parseTriggers(obj.getAsJsonArray("entry_points")),
                     attrOpt.get(),
                     absurdVal,
-                    invertedVal,
                     entry.getKey()
             ));
         }
     }
 
-    public static void parseEntityFlags(JsonObject root) {
-        if (!root.has("entity_flags")) return;
-        JsonObject flagsBlock = root.getAsJsonObject("entity_flags");
+    public static void parseFlags(JsonObject root) {
+        if (!root.has("flags")) return;
+        JsonObject flagsBlock = root.getAsJsonObject("flags");
 
         for (String ruleName : flagsBlock.keySet()) {
-            JsonObject ruleObj = flagsBlock.getAsJsonObject(ruleName);
-
-            JsonObject exitPoints = ruleObj.getAsJsonObject("exit_points");
-
-            List<List<String>> triggers = parseTriggers(ruleObj.getAsJsonArray("entry_points"));
-
-            String flag = exitPoints.get("flag").getAsString();
-            double absurdVal = exitPoints.get("absurd_val").getAsDouble();
-            double invertedVal = exitPoints.get("inverted_val").getAsDouble();
-
-            ENTITY_FLAG_RULES.add(new EntityFlagContext(ruleName, triggers, flag, absurdVal, invertedVal));
-        }
-        System.out.println("[Parser] Базовые флаги сущностей загружены: " + ENTITY_FLAG_RULES.size());
-    }
-
-    public static void parseLivingFlags(JsonObject root) {
-        if (!root.has("living_flags")) return;
-        JsonObject flagsBlock = root.getAsJsonObject("living_flags");
-
-        for (String ruleName : flagsBlock.keySet()) {
-            JsonObject ruleObj = flagsBlock.getAsJsonObject(ruleName);
-            JsonObject exitPoints = ruleObj.getAsJsonObject("exit_points");
-
-            // Вызываем твой идеальный метод парсинга синонимов
-            List<List<String>> triggers = parseTriggers(ruleObj.getAsJsonArray("entry_points"));
-
-            String flag = exitPoints.get("flag").getAsString();
-            double absurdVal = exitPoints.get("absurd_val").getAsDouble();
-            double invertedVal = exitPoints.get("inverted_val").getAsDouble();
-
-            LIVING_FLAG_RULES.add(new EntityFlagContext(ruleName, triggers, flag, absurdVal, invertedVal));
-        }
-        System.out.println("[Parser] Флаги живых существ загружены: " + LIVING_FLAG_RULES.size());
-    }
-
-    public static void parsePlayerFlags(JsonObject root) {
-        if (!root.has("player_flags")) return;
-        JsonObject flagsBlock = root.getAsJsonObject("player_flags");
-
-        for (String ruleName : flagsBlock.keySet()) {
-            JsonObject ruleObj = flagsBlock.getAsJsonObject(ruleName);
+            JsonElement rawEntry = flagsBlock.get(ruleName);
+            if (!rawEntry.isJsonObject()) continue; // пропускаем "//" комментарии
+            JsonObject ruleObj = rawEntry.getAsJsonObject();
+            processSttHints(ruleObj);
             JsonObject exitPoints = ruleObj.getAsJsonObject("exit_points");
             List<List<String>> triggers = parseTriggers(ruleObj.getAsJsonArray("entry_points"));
 
-            String flag = exitPoints.get("flag").getAsString();
-            double absurdVal = exitPoints.get("absurd_val").getAsDouble();
-            double invertedVal = exitPoints.get("inverted_val").getAsDouble();
-
-            PLAYER_FLAG_RULES.add(new EntityFlagContext(ruleName, triggers, flag, absurdVal, invertedVal));
+            if (exitPoints.has("atoms") || exitPoints.has("attr_atoms")) {
+                // Составной объект: флаговые атомы + атрибутные атомы
+                List<String> atoms = new ArrayList<>();
+                List<String> attrAtoms = new ArrayList<>();
+                if (exitPoints.has("atoms"))
+                    for (JsonElement el : exitPoints.getAsJsonArray("atoms"))
+                        atoms.add(el.getAsString());
+                if (exitPoints.has("attr_atoms"))
+                    for (JsonElement el : exitPoints.getAsJsonArray("attr_atoms"))
+                        attrAtoms.add(el.getAsString());
+                FLAG_RULES.add(new EntityFlagContext(ruleName, triggers, null, 1.0,
+                        atoms.isEmpty() ? null : atoms,
+                        attrAtoms.isEmpty() ? null : attrAtoms));
+            } else {
+                // Атом: простой флаг, absurd_val по умолчанию 1.0
+                String flag = exitPoints.get("flag").getAsString();
+                double absurdVal = exitPoints.has("absurd_val") ? exitPoints.get("absurd_val").getAsDouble() : 1.0;
+                FLAG_RULES.add(new EntityFlagContext(ruleName, triggers, flag, absurdVal, null, null));
+            }
         }
-        System.out.println("[Parser] Флаги игроков загружены: " + PLAYER_FLAG_RULES.size());
-    }
-
-    public static void parseNetworkFlags(JsonObject root) {
-        if (!root.has("network_flags")) return;
-        JsonObject flagsBlock = root.getAsJsonObject("network_flags");
-
-        for (String ruleName : flagsBlock.keySet()) {
-            JsonObject ruleObj = flagsBlock.getAsJsonObject(ruleName);
-            JsonObject exitPoints = ruleObj.getAsJsonObject("exit_points");
-
-            // Используем уже готовый метод парсинга синонимов
-            List<List<String>> triggers = parseTriggers(ruleObj.getAsJsonArray("entry_points"));
-
-            String flag = exitPoints.get("flag").getAsString();
-            double absurdVal = exitPoints.get("absurd_val").getAsDouble();
-            double invertedVal = exitPoints.get("inverted_val").getAsDouble();
-
-            NETWORK_FLAG_RULES.add(new EntityFlagContext(ruleName, triggers, flag, absurdVal, invertedVal));
-        }
-        System.out.println("[Parser] Флаги психики (Network) загружены: " + NETWORK_FLAG_RULES.size());
+        System.out.println("[Parser] Флаги загружены: " + FLAG_RULES.size());
     }
 
 
@@ -337,7 +277,8 @@ public class CyberSpaceParser {
         for (JsonElement orElem : array) {
             List<String> andList = new ArrayList<>();
             for (JsonElement andElem : orElem.getAsJsonArray()) {
-                andList.add(andElem.getAsString().toLowerCase());
+                String word = andElem.getAsString().toLowerCase();
+                andList.add(word);
             }
             orList.add(andList);
         }
@@ -347,36 +288,66 @@ public class CyberSpaceParser {
     // ==========================================
     // 4. ДВИЖОК ПОИСКА СОВПАДЕНИЙ (МЭТЧЕР)
     // ==========================================
-    public static boolean checkMatch(String input, List<List<String>> triggers) {
-        String lowerInput = input.toLowerCase();
-        for (List<String> andGroup : triggers) {
-            boolean allMatch = true;
-            for (String word : andGroup) {
-                if (!lowerInput.contains(word)) {
-                    allMatch = false;
-                    break;
-                }
+    public record MatchResult(int weight, BitSet indices) {}
 
-                // Умная проверка конфликтов: если корень найден, но он является частью 
-                // другого запрещенного слова из конфига - игнорируем его.
-                List<String> exclusions = CONFLICTS.get(word);
-                if (exclusions != null) {
-                    String clean = lowerInput;
-                    for (String ex : exclusions) clean = clean.replace(ex, " ");
-                    if (!clean.contains(word)) {
+    public static boolean checkMatch(String input, List<List<String>> triggers) {
+        return getMatchResult(input, triggers) != null;
+    }
+
+    /**
+     * Возвращает результат самого "тяжелого" совпадения для группы триггеров.
+     */
+    public static MatchResult getMatchResult(String input, List<List<String>> triggers) {
+        if (input == null || triggers == null) return null;
+        String lowerInput = input.toLowerCase();
+        MatchResult bestResult = null;
+
+        for (List<String> andGroup : triggers) {
+            // Собираем фразу из группы триггеров
+            String phrase = String.join(" ", andGroup);
+            int startIdx = lowerInput.indexOf(phrase);
+
+            if (startIdx != -1) {
+                // Если нашли фразу целиком - это идеальное совпадение
+                BitSet indices = new BitSet(input.length());
+                indices.set(startIdx, startIdx + phrase.length());
+                
+                // Вес - это полная длина фразы в строке
+                if (bestResult == null || phrase.length() > bestResult.weight) {
+                    bestResult = new MatchResult(phrase.length(), indices);
+                }
+            } else {
+                // Если фраза целиком не найдена, пробуем найти все слова по отдельности (старый вариант)
+                BitSet groupIndices = new BitSet(input.length());
+                boolean allMatch = true;
+                int combinedWeight = 0;
+
+                for (String word : andGroup) {
+                    int matchIdx = lowerInput.indexOf(word);
+                    if (matchIdx != -1) {
+                        groupIndices.set(matchIdx, matchIdx + word.length());
+                        combinedWeight += word.length();
+                    } else {
                         allMatch = false;
                         break;
                     }
                 }
+
+                if (allMatch && (bestResult == null || combinedWeight > bestResult.weight)) {
+                    bestResult = new MatchResult(combinedWeight, groupIndices);
+                }
             }
-            if (allMatch) return true;
         }
-        return false;
+        return bestResult;
+    }
+
+    public static MatchResult getSystemMatchResult(String input, String triggerKey) {
+        List<List<String>> triggers = SYSTEM_TRIGGERS.get(triggerKey);
+        return triggers != null ? getMatchResult(input, triggers) : null;
     }
 
     public static boolean hasSystemTrigger(String input, String triggerKey) {
-        List<List<String>> triggers = SYSTEM_TRIGGERS.get(triggerKey);
-        return triggers != null && checkMatch(input, triggers);
+        return checkMatch(input, SYSTEM_TRIGGERS.get(triggerKey));
     }
 
     // ==========================================
